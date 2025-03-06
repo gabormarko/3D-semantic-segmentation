@@ -7,6 +7,8 @@
 >**TL;DR**: Our paper presents a new end-to-end lifting framwork to achieve SOTA performance for 3D Gaussian segmentation.
 
 
+### Comparisons with existing works
+
 ![image](https://github.com/Runsong123/Unified-Lift/blob/main/Teaser.png)
 
 ### 3D point-level visualization
