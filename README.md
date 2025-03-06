@@ -8,6 +8,8 @@
 
 
 ![image](https://github.com/Runsong123/Unified-Lift/blob/main/Teaser.png)
+
+### 3D point-level visualization
 ![image](https://github.com/Runsong123/Unified-Lift/blob/main/3D_Segmentation.png)
 
 
