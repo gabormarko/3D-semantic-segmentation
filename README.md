@@ -4,7 +4,7 @@
 > **Runsong Zhu**, Shi Qiu, Zhengzhe Liu, Ka-Hei Hui, Qianyi Wu, Pheng-Ann Heng, Chi-Wing Fu
 > 
 
->**TL;DR**: Our paper presents a effective end-to-end lifting framwork to achieve SOTA performance for 3D Gaussian segmentation, without without the need of pre- or post-processing.
+>**TL;DR**: Our paper presents a new and effective end-to-end lifting framework that achieves state-of-the-art (SOTA) performance for 3D Gaussian segmentation, without the need for pre-processing (e.g., video tracking) or post-processing (e.g., clustering).
 
 ### Code (coming soon.)
 
