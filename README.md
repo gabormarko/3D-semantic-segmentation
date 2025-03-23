@@ -17,7 +17,7 @@
 
 
 ### How to use the code. 
-To use Unified-Lift, please refer to the [Usage](doc/Usage.md) guide (currently under construction).
+To use Unified-Lift, please refer to the [Usage](doc/Usage.md) guide.
 
 
 # Citation
