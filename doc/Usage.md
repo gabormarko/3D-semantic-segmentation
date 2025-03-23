@@ -1,4 +1,4 @@
-#### step 0. Installation. Please use the following script to set up the Python environment
+#### Step 0. Installation. Please use the following script to set up the Python environment
 ```
 git clone https://github.com/Runsong123/Unified-Lift.git
 cd Unified-Lift
@@ -13,15 +13,15 @@ pip install tqdm scipy wandb opencv-python scikit-learn lpips
 pip install submodules/diff-gaussian-rasterization
 pip install submodules/simple-knn
 ```
-#### step 1. Preparing the data. You can download the LERF-Masked dataset from this [link](https://huggingface.co/mqye/Gaussian-Grouping/tree/main/data/lerf_mask).
+#### Step 1. Preparing the data. You can download the LERF-Masked dataset from this [link](https://huggingface.co/mqye/Gaussian-Grouping/tree/main/data/lerf_mask).
 
 
-#### step 2. Training Unified-Lift (Gaussian-level features + object-level codebook). You can use the training scripts to train on the LERF-Masked dataset.
+#### Step 2. Training Unified-Lift (Gaussian-level features + object-level codebook). You can use the training scripts to train on the LERF-Masked dataset.
 ```
 bash train.sh
 ```
 
-#### step 3. Once you have finished training, you can directly predict segmentation. Use the following script to export the evaluation results.
+#### Step 3. Once you have finished training, Unified-Lift can directly predict segmentation. Use the following script to export the evaluation results.
 ```
 bash infer.sh
 ```
