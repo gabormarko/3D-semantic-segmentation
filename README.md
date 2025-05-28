@@ -6,7 +6,20 @@
 
 >**TL;DR**: Our paper presents a new and effective end-to-end lifting framework that achieves state-of-the-art (SOTA) performance for 3D Gaussian segmentation, without the need for pre-processing (e.g., video tracking) or post-processing (e.g., clustering).
 
+### Project Structure
+- `data/`: Directory for input data and datasets
+- `output/`: Directory for model outputs and results
+- `utils/`: Utility functions and helper scripts
+- `config/`: Configuration files
+- `gaussian_renderer/`: Core rendering components
+- `script/`: Training and inference scripts
 
+### Development Workflow
+1. Create feature branches for new development: `git checkout -b feature/your-feature-name`
+2. Make changes and commit regularly
+3. Push changes to remote: `git push origin feature/your-feature-name`
+4. Create pull requests for code review
+5. Merge approved changes to main branch
 
 ### Comparisons with existing works
 
