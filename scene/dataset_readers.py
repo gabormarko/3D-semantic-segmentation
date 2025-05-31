@@ -94,7 +94,14 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, objects_fol
 
         image_path = os.path.join(images_folder, os.path.basename(extr.name))
         image_name = os.path.basename(image_path).split(".")[0]
+        # Try to load the image with the original extension first
         image = Image.open(image_path) if os.path.exists(image_path) else None
+        # If that fails, try with .png extension
+        if image is None:
+            png_path = os.path.splitext(image_path)[0] + '.png'
+            image = Image.open(png_path) if os.path.exists(png_path) else None
+        if image is None:
+            print(f"[WARNING] Could not load image for camera {idx}: {image_path} or {png_path}")
         object_path = os.path.join(objects_folder, image_name + '.png')
         objects = Image.open(object_path) if os.path.exists(object_path) else None
 
