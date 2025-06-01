@@ -3,7 +3,7 @@
 # Default parameters
 MODEL_PATH="output/unifed_lift/teatime"  # Path to the trained model
 SOURCE_PATH="data/lerf/teatime"  # Path to source data
-IMAGES_PATH="data/lerf/teatime/images"  # Path to images
+IMAGES_PATH="images"  # Path to images (relative to SOURCE_PATH)
 ITERATION=-1  # Use latest iteration
 CELL_SIZE=0.05  # Size of hash grid cells
 HASH_SIZE=1048576  # 2^20

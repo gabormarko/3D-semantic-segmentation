@@ -82,12 +82,12 @@ def main():
     # Load scene
     scene = Scene(model_params, gaussians, load_iteration=args.iteration)
     
-    # Initialize surface detector
+    # Initialize surface detector with more aggressive filtering
     detector = SurfaceDetector(
-        opacity_threshold=0.5,
-        scale_threshold=0.1,
-        density_threshold=0.1,
-        k_neighbors=8
+        opacity_threshold=0.8,    # Increased from 0.7
+        scale_threshold=0.03,     # Decreased from 0.05
+        density_threshold=0.3,    # Increased from 0.2
+        k_neighbors=16           # Increased from 12 for better density estimation
     )
     
     # Get Gaussian parameters
@@ -105,10 +105,18 @@ def main():
     )
     print(f"Found {len(surface_points)} surface points")
     
-    # Initialize hash grid
-    print("Building hash grid...")
+    # Initialize hash grid with cell size for ~100k voxels
+    # For 100k voxels, we want (scene_extent/cell_size)³ ≈ 100000
+    # Therefore cell_size ≈ scene_extent / (100000)^(1/3)
+    target_cell_size = scene_extent / (100000 ** (1/3))  # This should give roughly 100k voxels
+    print(f"Using cell size of {target_cell_size:.3f} (scene extent: {scene_extent:.3f})")
+    print(f"Expected number of voxels: ~{(scene_extent/target_cell_size)**3:.0f}")
+    
+    # Use all surface points (no sampling)
+    print(f"Using all {len(surface_points)} surface points")
+    
     grid = HashGrid(
-        cell_size=args.cell_size,
+        cell_size=target_cell_size,  # Cell size for ~100k voxels
         hash_size=args.hash_size,
         max_points_per_cell=args.max_points_per_cell
     )
@@ -144,14 +152,20 @@ def main():
     print(f"Max query time: {query_times.max():.2f} ms")
     print(f"Std query time: {query_times.std():.2f} ms")
     
-    # Visualize
+    # Visualize with memory optimization
     if args.save_ply:
-        save_path = os.path.join(args.output_dir, f"hash_grid_iter{args.iteration}")
+        # Create filename with surface detection parameters
+        param_str = f"op{detector.opacity_threshold:.1f}_sc{detector.scale_threshold:.2f}_de{detector.density_threshold:.1f}_k{detector.k_neighbors}"
+        save_path = os.path.join(args.output_dir, f"hash_grid_iter{args.iteration}_{param_str}")
+        print("Saving visualization (this may take a while)...")
+        # Save points and grid separately to reduce memory usage
+        print("Saving point cloud...")
+        grid.visualize_points(save_path + "_points.ply")
+        print("Saving grid visualization...")
+        grid.visualize_grid(save_path + "_grid.ply")
     else:
-        save_path = None
-    
-    print("Visualizing hash grid...")
-    grid.visualize(save_path)
+        print("Visualizing hash grid (this may take a while)...")
+        grid.visualize(None)
 
 if __name__ == "__main__":
     main() 
