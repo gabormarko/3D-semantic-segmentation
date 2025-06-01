@@ -218,7 +218,16 @@ class HashGrid:
                 self.hash_table[cell_hash] = []
             if len(self.hash_table[cell_hash]) < self.max_points_per_cell:
                 self.hash_table[cell_hash].append(i)
-        
+
+        # --- Filter out voxels with fewer than the average number of points ---
+        # Count points per voxel
+        voxel_point_counts = {h: len(idx_list) for h, idx_list in self.hash_table.items()}
+        if len(voxel_point_counts) > 0:
+            avg_points_per_voxel = sum(voxel_point_counts.values()) / len(voxel_point_counts)
+            # Remove voxels with fewer than the average number of points
+            self.hash_table = {h: idx_list for h, idx_list in self.hash_table.items() if len(idx_list) >= avg_points_per_voxel}
+            print(f"Filtered voxels: {len(self.hash_table)} remain with >= average ({avg_points_per_voxel:.1f}) points per voxel.")
+
         # Store filtered points and attributes
         self.points = filtered_points
         self.normals = filtered_normals
@@ -461,6 +470,7 @@ class HashGrid:
         
         if save_path is not None:
             print(f"Saving grid visualization to {save_path}")
+            print(f"Number of voxels (cells) being saved: {len(self.hash_table)}")
             o3d.io.write_triangle_mesh(save_path, mesh)
         else:
             # Visualize
@@ -531,4 +541,4 @@ class HashGrid:
             # Set grid lines to red
             line_set.colors = o3d.utility.Vector3dVector(np.ones((len(grid_lines), 3)) * [1, 0, 0])
             
-            o3d.visualization.draw_geometries([pcd, line_set]) 
+            o3d.visualization.draw_geometries([pcd, line_set])
