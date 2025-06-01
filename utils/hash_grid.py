@@ -155,63 +155,140 @@ class HashGrid:
         cell_hash = self._hash_cell_coords(cell_coord.unsqueeze(0))[0].item()
         return self.hash_table.get(cell_hash, [])
     
-    def visualize(self, save_path: Optional[str] = None):
-        """Visualize the hash grid using Open3D."""
+    def visualize_points(self, save_path: str):
+        """Visualize only the points using Open3D."""
         if self.points is None:
             raise RuntimeError("Hash grid not built. Call build() first.")
         
         # Create point cloud
         pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(self.points.cpu().numpy())
+        pcd.points = o3d.utility.Vector3dVector(self.points.detach().cpu().numpy())
         
         if self.normals is not None:
-            pcd.normals = o3d.utility.Vector3dVector(self.normals.cpu().numpy())
+            pcd.normals = o3d.utility.Vector3dVector(self.normals.detach().cpu().numpy())
+        
+        # Set points to white
+        pcd.colors = o3d.utility.Vector3dVector(np.ones((len(self.points), 3)) * [1, 1, 1])
+        
+        # Save point cloud
+        o3d.io.write_point_cloud(save_path, pcd)
+        print(f"Saved point cloud to {save_path}")
+    
+    def visualize_grid(self, save_path: str):
+        """Visualize only the grid using Open3D."""
+        if self.points is None:
+            raise RuntimeError("Hash grid not built. Call build() first.")
+        
+        # Get grid bounds
+        cell_coords = self._get_cell_coords(self.points)
+        min_coords = cell_coords.min(dim=0)[0]
+        max_coords = cell_coords.max(dim=0)[0]
+        
+        # Only visualize cells that contain points
+        print("Collecting occupied cells...")
+        occupied_cells = set()
+        for i, cell_hash in enumerate(self._hash_cell_coords(cell_coords)):
+            if cell_hash.item() in self.hash_table:
+                occupied_cells.add(tuple(cell_coords[i].cpu().numpy()))
+        
+        print(f"Found {len(occupied_cells)} occupied cells")
+        print("Creating grid visualization...")
         
         # Create grid lines
         grid_lines = []
         grid_points = []
         
-        # Get grid bounds
-        min_coords = self._get_cell_coords(self.points).min(dim=0)[0]
-        max_coords = self._get_cell_coords(self.points).max(dim=0)[0]
-        
-        # Create grid lines
-        for x in range(min_coords[0], max_coords[0] + 1):
-            for y in range(min_coords[1], max_coords[1] + 1):
-                for z in range(min_coords[2], max_coords[2] + 1):
-                    cell_coord = torch.tensor([x, y, z], device=self.points.device)
-                    if self.get_cell_points(cell_coord):
-                        # Add cell corners
-                        corners = []
-                        for dx in [0, 1]:
-                            for dy in [0, 1]:
-                                for dz in [0, 1]:
-                                    corner = (cell_coord + torch.tensor([dx, dy, dz], device=self.points.device)) * self.cell_size
-                                    corners.append(corner.cpu().numpy())
-                                    grid_points.append(corner.cpu().numpy())
-                        
-                        # Add edges
-                        edges = [
-                            (0, 1), (0, 2), (0, 4),
-                            (1, 3), (1, 5),
-                            (2, 3), (2, 6),
-                            (3, 7),
-                            (4, 5), (4, 6),
-                            (5, 7),
-                            (6, 7)
-                        ]
-                        
-                        for edge in edges:
-                            grid_lines.append([len(grid_points) - 8 + edge[0], len(grid_points) - 8 + edge[1]])
+        # Create grid lines only for occupied cells
+        for cell_coord in occupied_cells:
+            cell_coord = torch.tensor(cell_coord, device=self.points.device)
+            # Add cell corners
+            corners = []
+            for dx in [0, 1]:
+                for dy in [0, 1]:
+                    for dz in [0, 1]:
+                        corner = (cell_coord + torch.tensor([dx, dy, dz], device=self.points.device)) * self.cell_size
+                        corners.append(corner.detach().cpu().numpy())
+                        grid_points.append(corner.detach().cpu().numpy())
+            
+            # Add edges
+            edges = [
+                (0, 1), (0, 2), (0, 4),
+                (1, 3), (1, 5),
+                (2, 3), (2, 6),
+                (3, 7),
+                (4, 5), (4, 6),
+                (5, 7),
+                (6, 7)
+            ]
+            
+            for edge in edges:
+                grid_lines.append([len(grid_points) - 8 + edge[0], len(grid_points) - 8 + edge[1]])
         
         # Create line set
         line_set = o3d.geometry.LineSet()
         line_set.points = o3d.utility.Vector3dVector(np.array(grid_points))
         line_set.lines = o3d.utility.Vector2iVector(np.array(grid_lines))
         
-        # Visualize
+        # Set grid lines to red
+        line_set.colors = o3d.utility.Vector3dVector(np.ones((len(grid_lines), 3)) * [1, 0, 0])
+        
+        # Save grid
+        o3d.io.write_line_set(save_path, line_set)
+        print(f"Saved grid visualization to {save_path}")
+    
+    def visualize(self, save_path: Optional[str] = None):
+        """Visualize both points and grid using Open3D."""
         if save_path is not None:
-            o3d.io.write_point_cloud(save_path + "_points.ply", pcd)
-            o3d.io.write_line_set(save_path + "_grid.ply", line_set)
+            self.visualize_points(save_path + "_points.ply")
+            self.visualize_grid(save_path + "_grid.ply")
         else:
+            # For interactive visualization, we need both
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(self.points.detach().cpu().numpy())
+            if self.normals is not None:
+                pcd.normals = o3d.utility.Vector3dVector(self.normals.detach().cpu().numpy())
+            
+            # Set points to white
+            pcd.colors = o3d.utility.Vector3dVector(np.ones((len(self.points), 3)) * [1, 1, 1])
+            
+            # Get grid visualization
+            cell_coords = self._get_cell_coords(self.points)
+            occupied_cells = set()
+            for i, cell_hash in enumerate(self._hash_cell_coords(cell_coords)):
+                if cell_hash.item() in self.hash_table:
+                    occupied_cells.add(tuple(cell_coords[i].cpu().numpy()))
+            
+            grid_lines = []
+            grid_points = []
+            
+            for cell_coord in occupied_cells:
+                cell_coord = torch.tensor(cell_coord, device=self.points.device)
+                corners = []
+                for dx in [0, 1]:
+                    for dy in [0, 1]:
+                        for dz in [0, 1]:
+                            corner = (cell_coord + torch.tensor([dx, dy, dz], device=self.points.device)) * self.cell_size
+                            corners.append(corner.detach().cpu().numpy())
+                            grid_points.append(corner.detach().cpu().numpy())
+                
+                edges = [
+                    (0, 1), (0, 2), (0, 4),
+                    (1, 3), (1, 5),
+                    (2, 3), (2, 6),
+                    (3, 7),
+                    (4, 5), (4, 6),
+                    (5, 7),
+                    (6, 7)
+                ]
+                
+                for edge in edges:
+                    grid_lines.append([len(grid_points) - 8 + edge[0], len(grid_points) - 8 + edge[1]])
+            
+            line_set = o3d.geometry.LineSet()
+            line_set.points = o3d.utility.Vector3dVector(np.array(grid_points))
+            line_set.lines = o3d.utility.Vector2iVector(np.array(grid_lines))
+            
+            # Set grid lines to red
+            line_set.colors = o3d.utility.Vector3dVector(np.ones((len(grid_lines), 3)) * [1, 0, 0])
+            
             o3d.visualization.draw_geometries([pcd, line_set]) 
