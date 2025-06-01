@@ -143,6 +143,24 @@ def main():
         normals=surface_normals,
         confidence=None  # No confidence scores available yet
     )
+
+    # --- BEGIN: Filter out voxels with less than average points ---
+    # Count points per voxel
+    point_counts = [len(indices) for indices in grid.hash_table.values()]
+    if len(point_counts) == 0:
+        avg_points = 0
+    else:
+        avg_points = sum(point_counts) / len(point_counts)
+
+    # Only keep voxels with at least the average number of points
+    filtered_hash_table = {}
+    for cell_hash, indices in grid.hash_table.items():
+        if len(indices) >= avg_points:
+            filtered_hash_table[cell_hash] = indices
+    grid.hash_table = filtered_hash_table
+
+    print(f"Filtered voxels: {len(grid.hash_table)} remain with >= average ({avg_points:.1f}) points per voxel")
+    # --- END: Filter out voxels with less than average points ---
     
     # Test queries
     print(f"\nPerforming {args.test_queries} test queries...")
@@ -204,4 +222,4 @@ def main():
         grid.visualize(None)
 
 if __name__ == "__main__":
-    main() 
+    main()
