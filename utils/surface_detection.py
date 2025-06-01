@@ -6,10 +6,10 @@ import open3d as o3d
 
 class SurfaceDetector:
     def __init__(self, 
-                 opacity_threshold: float = 0.5,
+                 opacity_threshold: float = 0.8,
                  scale_threshold: float = 0.1,
                  density_threshold: float = 0.1,
-                 k_neighbors: int = 8):
+                 k_neighbors: int = 16):
         """
         Initialize the surface detector.
         

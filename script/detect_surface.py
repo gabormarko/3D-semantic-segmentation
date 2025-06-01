@@ -104,7 +104,9 @@ def main():
     
     # Visualize surface
     if args.save_ply:
-        save_path = os.path.join(args.output_dir, f"surface_iter{args.iteration}.ply")
+        # Create filename with surface detection parameters
+        param_str = f"op{detector.opacity_threshold:.1f}_sc{detector.scale_threshold:.2f}_de{detector.density_threshold:.1f}_k{detector.k_neighbors}"
+        save_path = os.path.join(args.output_dir, f"surface_iter{args.iteration}_{param_str}.ply")
     else:
         save_path = None
     
