@@ -154,9 +154,11 @@ def main():
     
     # Visualize with memory optimization
     if args.save_ply:
-        # Create filename with surface detection parameters
+        # Extract scene name from model path
+        scene_name = os.path.basename(os.path.normpath(args.model_path))
+        # Create filename with scene name and surface detection parameters
         param_str = f"op{detector.opacity_threshold:.1f}_sc{detector.scale_threshold:.2f}_de{detector.density_threshold:.1f}_k{detector.k_neighbors}"
-        save_path = os.path.join(args.output_dir, f"hash_grid_iter{args.iteration}_{param_str}")
+        save_path = os.path.join(args.output_dir, f"{scene_name}_hash_grid_iter{args.iteration}_{param_str}")
         print("Saving visualization (this may take a while)...")
         # Save points and grid separately to reduce memory usage
         print("Saving point cloud...")
