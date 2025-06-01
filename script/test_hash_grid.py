@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 
 # Add project root to Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -50,6 +51,10 @@ def parse_args():
     io_group.add_argument("--output_dir", default="output/hash_grid", help="Output directory for visualizations")
     io_group.add_argument("--save_ply", action="store_true", help="Save visualization as PLY files")
     
+    # Add new arguments
+    parser.add_argument("--query_batch_size", type=int, default=100,
+                      help="Number of queries to process in each batch")
+    
     return parser.parse_args()
 
 def main():
@@ -82,12 +87,14 @@ def main():
     # Load scene
     scene = Scene(model_params, gaussians, load_iteration=args.iteration)
     
-    # Initialize surface detector with more aggressive filtering
+    # Initialize surface detector with more aggressive filtering for dense geometry
     detector = SurfaceDetector(
-        opacity_threshold=0.8,    # Increased from 0.7
-        scale_threshold=0.03,     # Decreased from 0.05
-        density_threshold=0.3,    # Increased from 0.2
-        k_neighbors=16           # Increased from 12 for better density estimation
+        opacity_threshold=0.8,    # High opacity for solid surfaces
+        scale_threshold=0.02,     # Smaller scale threshold to focus on detailed geometry
+        density_threshold=0.4,    # Higher density threshold to focus on concentrated areas
+        k_neighbors=16,          # More neighbors for better density estimation
+        spatial_concentration_threshold=0.4,  # Higher threshold for spatial concentration
+        min_cluster_size=50      # Smaller minimum cluster size to allow for smaller dense regions
     )
     
     # Get Gaussian parameters
@@ -95,8 +102,9 @@ def main():
     opacity = gaussians.get_opacity
     scaling = gaussians.get_scaling
     
-    # Compute scene extent
+    # Compute scene extent before surface detection
     scene_extent = torch.max(torch.norm(xyz, dim=1)).item()
+    print(f"Scene extent: {scene_extent:.3f}")
     
     # Extract surface points
     print("Extracting surface points...")
@@ -105,52 +113,78 @@ def main():
     )
     print(f"Found {len(surface_points)} surface points")
     
-    # Initialize hash grid with cell size for ~100k voxels
-    # For 100k voxels, we want (scene_extent/cell_size)³ ≈ 100000
-    # Therefore cell_size ≈ scene_extent / (100000)^(1/3)
-    target_cell_size = scene_extent / (100000 ** (1/3))  # This should give roughly 100k voxels
-    print(f"Using cell size of {target_cell_size:.3f} (scene extent: {scene_extent:.3f})")
-    print(f"Expected number of voxels: ~{(scene_extent/target_cell_size)**3:.0f}")
+    # Calculate adaptive cell sizes based on density
+    # Use smaller cells in dense regions, larger in sparse regions
+    base_cell_size = scene_extent / 50  # Base size for sparse regions
+    min_cell_size = base_cell_size * 0.2  # Much smaller cells in dense regions
+    max_cell_size = base_cell_size * 1.5  # Larger cells in sparse regions
     
-    # Use all surface points (no sampling)
-    print(f"Using all {len(surface_points)} surface points")
+    print(f"\nCell Size Parameters:")
+    print(f"Base cell size: {base_cell_size:.3f}")
+    print(f"Minimum cell size (dense regions): {min_cell_size:.3f}")
+    print(f"Maximum cell size (sparse regions): {max_cell_size:.3f}")
     
+    # Create hash grid with adaptive cell sizing
     grid = HashGrid(
-        cell_size=target_cell_size,  # Cell size for ~100k voxels
+        min_cell_size=min_cell_size,    # Very small cells in dense regions
+        max_cell_size=max_cell_size,    # Larger cells in sparse regions
         hash_size=args.hash_size,
-        max_points_per_cell=args.max_points_per_cell
+        max_points_per_cell=args.max_points_per_cell,
+        confidence_threshold=0.5,
+        curvature_threshold=0.1,
+        concentration_weight=0.5,        # Increased weight for spatial concentration
+        density_weight=0.4,             # Increased weight for local density
+        curvature_weight=0.1            # Reduced weight for curvature
     )
-    grid.build(surface_points, surface_normals)
+    
+    # Build grid with points and normals
+    grid.build(
+        points=surface_points,
+        normals=surface_normals,
+        confidence=None  # No confidence scores available yet
+    )
     
     # Test queries
-    print(f"Performing {args.test_queries} test queries...")
-    query_times = []
+    print(f"\nPerforming {args.test_queries} test queries...")
+    query_batch_size = args.query_batch_size
+    total_queries = args.test_queries
+    total_time = 0
+    total_success = 0
     
-    # Generate random query points within the scene bounds
-    min_coords = surface_points.min(dim=0)[0]
-    max_coords = surface_points.max(dim=0)[0]
-    query_points = torch.rand(args.test_queries, 3, device=surface_points.device)
-    query_points = query_points * (max_coords - min_coords) + min_coords
-    
-    # Perform queries
-    for query_point in tqdm(query_points):
-        start_time = torch.cuda.Event(enable_timing=True)
-        end_time = torch.cuda.Event(enable_timing=True)
+    for batch_start in tqdm(range(0, total_queries, query_batch_size), desc="Testing queries"):
+        batch_end = min(batch_start + query_batch_size, total_queries)
+        batch_size = batch_end - batch_start
         
-        start_time.record()
-        indices, distances = grid.query_points(query_point.unsqueeze(0), k=8)
-        end_time.record()
+        # Generate random query points within scene bounds
+        query_points = torch.rand((batch_size, 3), device=surface_points.device) * scene_extent
         
-        torch.cuda.synchronize()
-        query_times.append(start_time.elapsed_time(end_time))
+        try:
+            # Time the query
+            start_time = time.time()
+            indices, distances = grid.query_points(query_points, k=8)
+            batch_time = time.time() - start_time
+            total_time += batch_time
+            
+            # Count successful queries (those with at least one valid neighbor)
+            valid_queries = (indices != -1).any(dim=1).sum().item()
+            total_success += valid_queries
+            
+            # Print batch statistics
+            print(f"\nBatch {batch_start//query_batch_size + 1}:")
+            print(f"  Queries: {batch_size}")
+            print(f"  Valid queries: {valid_queries}")
+            print(f"  Average time per query: {batch_time/batch_size*1000:.2f}ms")
+            
+        except Exception as e:
+            print(f"\nWarning: Error in batch {batch_start//query_batch_size + 1}: {str(e)}")
+            continue
     
-    # Print statistics
-    query_times = torch.tensor(query_times)
-    print(f"\nQuery statistics:")
-    print(f"Mean query time: {query_times.mean():.2f} ms")
-    print(f"Min query time: {query_times.min():.2f} ms")
-    print(f"Max query time: {query_times.max():.2f} ms")
-    print(f"Std query time: {query_times.std():.2f} ms")
+    # Print final statistics
+    print("\nFinal Statistics:")
+    print(f"Total queries: {total_queries}")
+    print(f"Successful queries: {total_success}")
+    print(f"Success rate: {total_success/total_queries*100:.1f}%")
+    print(f"Average time per query: {total_time/total_queries*1000:.2f}ms")
     
     # Visualize with memory optimization
     if args.save_ply:
