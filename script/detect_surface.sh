@@ -7,10 +7,10 @@ IMAGES_PATH=images
 ITERATION=30000
 
 # Surface detection parameters
-OPACITY_THRESH=0.5
+OPACITY_THRESH=0.8
 SCALE_THRESH=0.01
 DENSITY_THRESH=0.1
-K_NEIGHBORS=8
+K_NEIGHBORS=16
 
 # Output parameters
 OUTPUT_DIR="output/surface/teatime"
