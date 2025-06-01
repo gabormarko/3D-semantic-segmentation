@@ -3,13 +3,16 @@ import numpy as np
 from scipy.spatial import KDTree
 from typing import Tuple, Optional
 import open3d as o3d
+from sklearn.cluster import DBSCAN
 
 class SurfaceDetector:
     def __init__(self, 
                  opacity_threshold: float = 0.8,
                  scale_threshold: float = 0.1,
                  density_threshold: float = 0.1,
-                 k_neighbors: int = 16):
+                 k_neighbors: int = 16,
+                 spatial_concentration_threshold: float = 0.3,
+                 min_cluster_size: int = 100):
         """
         Initialize the surface detector.
         
@@ -18,11 +21,15 @@ class SurfaceDetector:
             scale_threshold: Maximum scale for a Gaussian to be considered (relative to scene extent)
             density_threshold: Minimum local density for a point to be considered part of the surface
             k_neighbors: Number of neighbors to consider for density estimation
+            spatial_concentration_threshold: Threshold for spatial concentration (0-1)
+            min_cluster_size: Minimum number of points in a cluster to be considered valid
         """
         self.opacity_threshold = opacity_threshold
         self.scale_threshold = scale_threshold
         self.density_threshold = density_threshold
         self.k_neighbors = k_neighbors
+        self.spatial_concentration_threshold = spatial_concentration_threshold
+        self.min_cluster_size = min_cluster_size
 
     def filter_gaussians(self, 
                         xyz: torch.Tensor,
@@ -85,13 +92,74 @@ class SurfaceDetector:
         
         return density
 
+    def compute_spatial_concentration(self, xyz: torch.Tensor) -> torch.Tensor:
+        """
+        Compute spatial concentration score for each point.
+        Points in dense clusters get higher scores, isolated points get lower scores.
+        """
+        # Convert to numpy for DBSCAN
+        points_np = xyz.detach().cpu().numpy()
+        
+        # Compute pairwise distances
+        clustering = DBSCAN(eps=self.scale_threshold * 2, min_samples=5).fit(points_np)
+        labels = clustering.labels_
+        
+        # Count points in each cluster
+        unique_labels, counts = np.unique(labels, return_counts=True)
+        cluster_sizes = dict(zip(unique_labels, counts))
+        
+        # Assign concentration scores based on cluster size
+        concentration = torch.zeros(len(points_np), device=xyz.device)
+        for i, label in enumerate(labels):
+            if label != -1:  # Not noise
+                size = cluster_sizes[label]
+                concentration[i] = min(1.0, size / self.min_cluster_size)
+        
+        return concentration
+
+    def filter_background_points(self, 
+                               xyz: torch.Tensor,
+                               opacity: torch.Tensor,
+                               scaling: torch.Tensor,
+                               scene_extent: float) -> torch.Tensor:
+        """
+        Filter out background points by analyzing spatial distribution and density.
+        
+        Args:
+            xyz: Gaussian positions (N, 3)
+            opacity: Gaussian opacities (N, 1)
+            scaling: Gaussian scales (N, 3)
+            scene_extent: Scene extent for scale normalization
+            
+        Returns:
+            Boolean mask of points to keep (True for foreground points)
+        """
+        # Basic filtering by opacity and scale
+        valid_mask = self.filter_gaussians(xyz, opacity, scaling, scene_extent)
+        
+        # Compute local density
+        density = self.compute_local_density(xyz, valid_mask)
+        
+        # Compute spatial concentration
+        concentration = self.compute_spatial_concentration(xyz)
+        
+        # Combine masks
+        density_mask = density > self.density_threshold
+        concentration_mask = concentration > self.spatial_concentration_threshold
+        
+        # Points must satisfy all criteria
+        foreground_mask = torch.logical_and(valid_mask, density_mask)
+        foreground_mask = torch.logical_and(foreground_mask, concentration_mask)
+        
+        return foreground_mask
+
     def extract_surface_points(self,
                              xyz: torch.Tensor,
                              opacity: torch.Tensor,
                              scaling: torch.Tensor,
                              scene_extent: float) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Extract surface points from Gaussians.
+        Extract surface points from Gaussians, focusing on concentrated geometry.
         
         Args:
             xyz: Gaussian positions (N, 3)
@@ -102,21 +170,29 @@ class SurfaceDetector:
         Returns:
             Tuple of (surface_points, surface_normals)
         """
-        # Filter Gaussians
-        valid_mask = self.filter_gaussians(xyz, opacity, scaling, scene_extent)
+        # Filter out background points
+        foreground_mask = self.filter_background_points(xyz, opacity, scaling, scene_extent)
         
-        # Compute local density
-        density = self.compute_local_density(xyz, valid_mask)
+        # Get foreground points
+        foreground_points = xyz[foreground_mask]
+        
+        # Compute local density for remaining points
+        density = self.compute_local_density(foreground_points, torch.ones(len(foreground_points), dtype=torch.bool, device=xyz.device))
         
         # Filter by density
         density_mask = density > self.density_threshold
-        surface_mask = torch.logical_and(valid_mask, density_mask)
+        surface_mask = density_mask
         
         # Get surface points
-        surface_points = xyz[surface_mask]
+        surface_points = foreground_points[surface_mask]
         
         # Estimate normals using PCA on local neighborhood
         surface_normals = self.estimate_normals(surface_points)
+        
+        print(f"\nSurface Detection Statistics:")
+        print(f"Total points: {len(xyz)}")
+        print(f"Foreground points: {len(foreground_points)}")
+        print(f"Surface points: {len(surface_points)}")
         
         return surface_points, surface_normals
 
