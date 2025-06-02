@@ -50,11 +50,18 @@ def loadCam(args, id, cam_info, resolution_scale):
     if resized_image_rgb.shape[1] == 4:
         loaded_mask = resized_image_rgb[3:4, ...]
 
+    # Handle cam_info.objects robustly
+    objects_np = np.array(cam_info.objects)
+    if objects_np.dtype in [np.float64, np.float32, np.float16, np.complex64, np.complex128, np.int64, np.int32, np.int16, np.int8, np.uint64, np.uint32, np.uint16, np.uint8, np.bool_]:
+        objects_tensor = torch.from_numpy(objects_np)
+    else:
+        objects_tensor = cam_info.objects  # leave as list or whatever it is
+
     return Camera(colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
                   FoVx=cam_info.FovX, FoVy=cam_info.FovY, 
                   image=gt_image, gt_alpha_mask=loaded_mask,
                   image_name=cam_info.image_name, uid=id, data_device=args.data_device,
-                  objects=torch.from_numpy(np.array(cam_info.objects)))
+                  objects=objects_tensor)
 
 def cameraList_from_camInfos(cam_infos, resolution_scale, args):
     camera_list = []
