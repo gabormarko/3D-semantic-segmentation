@@ -473,124 +473,153 @@ class HashGrid:
         """Visualize the hash grid as wireframe cubes for non-empty voxels."""
         if self.points is None:
             raise RuntimeError("Hash grid not built. Call build() first.")
-            
-        # Get cell coordinates for all points
-        cell_coords = self._get_cell_coords(self.points, self.cell_sizes)
-        cell_hashes = self._hash_cell_coords(cell_coords)
         
-        # Collect occupied cells and their average cell sizes and point counts
-        occupied_cells = {}  # Map cell coordinates to (avg_cell_size, point_count)
-        for i, (cell_coord, cell_hash) in enumerate(zip(cell_coords, cell_hashes)):
-            if cell_hash.item() in self.hash_table:
-                cell_key = tuple(cell_coord.cpu().numpy())
-                if cell_key not in occupied_cells:
-                    occupied_cells[cell_key] = {"sizes": [], "count": 0}
-                occupied_cells[cell_key]["sizes"].append(self.cell_sizes[i].item())
-                occupied_cells[cell_key]["count"] += 1
-        
-        # Compute statistics
-        point_counts = [cell_info["count"] for cell_info in occupied_cells.values()]
-        min_points = min(point_counts)
-        max_points = max(point_counts)
-        avg_points = sum(point_counts) / len(point_counts)
-        
-        # Compute average cell size for each occupied cell
-        for cell_key in occupied_cells:
-            occupied_cells[cell_key]["avg_size"] = sum(occupied_cells[cell_key]["sizes"]) / len(occupied_cells[cell_key]["sizes"])
-        
-        num_voxels = len(occupied_cells)
-        print("\nVoxel Grid Statistics:")
-        print(f"Total number of voxels: {num_voxels}")
-        print(f"Average cell size: {sum(cell['avg_size'] for cell in occupied_cells.values()) / num_voxels:.3f}")
-        print(f"Total number of points: {len(self.points)}")
-        print(f"Points per voxel:")
-        print(f"  Minimum: {min_points}")
-        print(f"  Maximum: {max_points}")
-        print(f"  Average: {avg_points:.1f}")
-        
-        # Create wireframe visualization with thinner lines
+        # Detect if this is a regular (structured) grid
+        is_structured = self.normals is None and self.cell_sizes is not None and torch.allclose(self.cell_sizes, self.cell_sizes[0])
+        grid_color = [0.2, 0.2, 0.8] if is_structured else [0.8, 0.2, 0.2]
         vertices = []
         triangles = []
         vertex_colors = []
         
-        # Create wireframe for each occupied cell
-        for cell_coord, cell_info in occupied_cells.items():
-            cell_coord = torch.tensor(cell_coord, device=self.points.device)
-            cell_size = cell_info["avg_size"]
+        if is_structured:
+            # For regular grid, visualize all voxels in self.hash_table
+            cell_size = self.cell_sizes[0].item()
+            # To reconstruct cell coordinates, store them in hash_table as (cell_coord, idx_list)
+            # We'll need to update build_structured_grid to store cell_coord as well
+            for cell_hash, idx_list in self.hash_table.items():
+                # Try to recover cell_coord from one of the points in idx_list
+                if len(idx_list) == 0:
+                    continue
+                pt = self.points[idx_list[0]]
+                # Recompute cell_coord
+                min_corner = self.points.min(dim=0)[0]
+                cell_coord = torch.floor((pt - min_corner) / cell_size).long()
+                # Get cell corners
+                corners = []
+                for dx in [0, 1]:
+                    for dy in [0, 1]:
+                        for dz in [0, 1]:
+                            corner = (cell_coord + torch.tensor([dx, dy, dz], device=self.points.device)) * cell_size + min_corner
+                            corners.append(corner.detach().cpu().numpy())
+                # Define edges of the cube (12 edges)
+                edges = [
+                    (0, 1), (0, 2), (0, 4),  # Front face
+                    (1, 3), (1, 5),          # Right face
+                    (2, 3), (2, 6),          # Back face
+                    (3, 7),                  # Top face
+                    (4, 5), (4, 6),          # Bottom face
+                    (5, 7), (6, 7)           # Left face
+                ]
+                for edge in edges:
+                    start = corners[edge[0]]
+                    end = corners[edge[1]]
+                    cylinder = o3d.geometry.TriangleMesh.create_cylinder(radius=0.005, height=1.0)
+                    direction = end - start
+                    length = np.linalg.norm(direction)
+                    if length > 0:
+                        direction = direction / length
+                        z_axis = np.array([0, 0, 1])
+                        rotation_axis = np.cross(z_axis, direction)
+                        if np.linalg.norm(rotation_axis) > 0:
+                            rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
+                            rotation_angle = np.arccos(np.dot(z_axis, direction))
+                            rotation_matrix = o3d.geometry.get_rotation_matrix_from_axis_angle(rotation_axis * rotation_angle)
+                            cylinder.rotate(rotation_matrix, center=[0, 0, 0])
+                        cylinder.scale(length, center=[0, 0, 0])
+                        cylinder.translate((start + end) / 2)
+                        vertices.extend(np.asarray(cylinder.vertices))
+                        triangles.extend(np.asarray(cylinder.triangles) + len(vertices) - len(cylinder.vertices))
+                        vertex_colors.extend(np.ones((len(cylinder.vertices), 3)) * grid_color)
+        else:
+            # Get cell coordinates for all points
+            cell_coords = self._get_cell_coords(self.points, self.cell_sizes)
+            cell_hashes = self._hash_cell_coords(cell_coords)
+            occupied_cells = {}
+            for i, (cell_coord, cell_hash) in enumerate(zip(cell_coords, cell_hashes)):
+                if cell_hash.item() in self.hash_table:
+                    cell_key = tuple(cell_coord.cpu().numpy())
+                    if cell_key not in occupied_cells:
+                        occupied_cells[cell_key] = {"sizes": [], "count": 0}
+                    occupied_cells[cell_key]["sizes"].append(self.cell_sizes[i].item())
+                    occupied_cells[cell_key]["count"] += 1
+            # Compute statistics
+            point_counts = [cell_info["count"] for cell_info in occupied_cells.values()]
+            if not point_counts:
+                print("No voxels to visualize!")
+                return
+            min_points = min(point_counts)
+            max_points = max(point_counts)
+            avg_points = sum(point_counts) / len(point_counts)
             
-            # Get cell corners
-            corners = []
-            for dx in [0, 1]:
-                for dy in [0, 1]:
-                    for dz in [0, 1]:
-                        corner = (cell_coord + torch.tensor([dx, dy, dz], device=self.points.device)) * cell_size
-                        corners.append(corner.detach().cpu().numpy())
+            # Compute average cell size for each occupied cell
+            for cell_key in occupied_cells:
+                occupied_cells[cell_key]["avg_size"] = sum(occupied_cells[cell_key]["sizes"]) / len(occupied_cells[cell_key]["sizes"])
             
-            # Define edges of the cube (12 edges)
-            edges = [
-                (0, 1), (0, 2), (0, 4),  # Front face
-                (1, 3), (1, 5),          # Right face
-                (2, 3), (2, 6),          # Back face
-                (3, 7),                  # Top face
-                (4, 5), (4, 6),          # Bottom face
-                (5, 7), (6, 7)           # Left face
-            ]
+            num_voxels = len(occupied_cells)
+            print("\nVoxel Grid Statistics:")
+            print(f"Total number of voxels: {num_voxels}")
+            print(f"Average cell size: {sum(cell['avg_size'] for cell in occupied_cells.values()) / num_voxels:.3f}")
+            print(f"Total number of points: {len(self.points)}")
+            print(f"Points per voxel:")
+            print(f"  Minimum: {min_points}")
+            print(f"  Maximum: {max_points}")
+            print(f"  Average: {avg_points:.1f}")
             
-            # For each edge, create a thin cylinder mesh
-            # Use thinner lines (reduced radius)
-            for edge in edges:
-                start = corners[edge[0]]
-                end = corners[edge[1]]
-                # Create a thinner cylinder for the edge (reduced radius from 0.02 to 0.005)
-                cylinder = o3d.geometry.TriangleMesh.create_cylinder(radius=0.005, height=1.0)
-                # Compute rotation to align cylinder with edge
-                direction = end - start
-                length = np.linalg.norm(direction)
-                if length > 0:
-                    # Normalize direction
-                    direction = direction / length
-                    # Create rotation matrix
-                    z_axis = np.array([0, 0, 1])
-                    rotation_axis = np.cross(z_axis, direction)
-                    if np.linalg.norm(rotation_axis) > 0:
-                        rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
-                        rotation_angle = np.arccos(np.dot(z_axis, direction))
-                        rotation_matrix = o3d.geometry.get_rotation_matrix_from_axis_angle(rotation_axis * rotation_angle)
-                        cylinder.rotate(rotation_matrix, center=[0, 0, 0])
-                    # Scale and translate
-                    cylinder.scale(length, center=[0, 0, 0])
-                    cylinder.translate((start + end) / 2)
-                    # Add to mesh
-                    vertices.extend(np.asarray(cylinder.vertices))
-                    triangles.extend(np.asarray(cylinder.triangles) + len(vertices) - len(cylinder.vertices))
-                    # Use a more subtle red color
-                    vertex_colors.extend(np.ones((len(cylinder.vertices), 3)) * [0.8, 0.2, 0.2])
-        
+            # Create wireframe visualization with thinner lines
+            for cell_key in occupied_cells:
+                cell_coord = torch.tensor(cell_key, device=self.points.device)
+                cell_size = sum(occupied_cells[cell_key]["sizes"]) / len(occupied_cells[cell_key]["sizes"])
+                corners = []
+                for dx in [0, 1]:
+                    for dy in [0, 1]:
+                        for dz in [0, 1]:
+                            corner = (cell_coord + torch.tensor([dx, dy, dz], device=self.points.device)) * cell_size
+                            corners.append(corner.detach().cpu().numpy())
+                edges = [
+                    (0, 1), (0, 2), (0, 4),
+                    (1, 3), (1, 5),
+                    (2, 3), (2, 6),
+                    (3, 7),
+                    (4, 5), (4, 6),
+                    (5, 7), (6, 7)
+                ]
+                for edge in edges:
+                    start = corners[edge[0]]
+                    end = corners[edge[1]]
+                    cylinder = o3d.geometry.TriangleMesh.create_cylinder(radius=0.005, height=1.0)
+                    direction = end - start
+                    length = np.linalg.norm(direction)
+                    if length > 0:
+                        direction = direction / length
+                        z_axis = np.array([0, 0, 1])
+                        rotation_axis = np.cross(z_axis, direction)
+                        if np.linalg.norm(rotation_axis) > 0:
+                            rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
+                            rotation_angle = np.arccos(np.dot(z_axis, direction))
+                            rotation_matrix = o3d.geometry.get_rotation_matrix_from_axis_angle(rotation_axis * rotation_angle)
+                            cylinder.rotate(rotation_matrix, center=[0, 0, 0])
+                        cylinder.scale(length, center=[0, 0, 0])
+                        cylinder.translate((start + end) / 2)
+                        vertices.extend(np.asarray(cylinder.vertices))
+                        triangles.extend(np.asarray(cylinder.triangles) + len(vertices) - len(cylinder.vertices))
+                        vertex_colors.extend(np.ones((len(cylinder.vertices), 3)) * grid_color)
         if len(vertices) == 0:
             print("No voxels to visualize!")
             return
-            
-        # Create mesh
         mesh = o3d.geometry.TriangleMesh()
         mesh.vertices = o3d.utility.Vector3dVector(np.array(vertices))
         mesh.triangles = o3d.utility.Vector3iVector(np.array(triangles))
         mesh.vertex_colors = o3d.utility.Vector3dVector(np.array(vertex_colors))
-        
         if save_path is not None:
             print(f"Saving grid visualization to {save_path}")
             print(f"Number of voxels (cells) being saved: {len(self.hash_table)}")
             o3d.io.write_triangle_mesh(save_path, mesh)
         else:
-            # Visualize
             vis = o3d.visualization.Visualizer()
             vis.create_window()
             vis.add_geometry(mesh)
-            
-            # Set up camera
             ctr = vis.get_view_control()
             ctr.set_zoom(0.8)
-            
-            # Run visualizer
             vis.run()
             vis.destroy_window()
     
@@ -650,3 +679,57 @@ class HashGrid:
             line_set.colors = o3d.utility.Vector3dVector(np.ones((len(grid_lines), 3)) * [1, 0, 0])
             
             o3d.visualization.draw_geometries([pcd, line_set])
+    
+    def build_structured_grid(self, 
+                            points: torch.Tensor,
+                            cell_size: Optional[float] = None,
+                            confidence: Optional[torch.Tensor] = None,
+                            target_voxel_count: int = 50000):
+        """
+        Build a regular voxel grid around the geometry, keeping only the top N densest voxels.
+        Args:
+            points: Input points (N, 3)
+            cell_size: Size of each voxel (if None, use self.min_cell_size)
+            confidence: Optional confidence mask
+            target_voxel_count: Number of voxels to keep (by density)
+        """
+        if confidence is None:
+            confidence = torch.ones(len(points), device=points.device)
+        mask = confidence > self.confidence_threshold
+        filtered_points = points[mask]
+        if cell_size is None:
+            cell_size = self.min_cell_size
+        # Compute bounding box
+        min_corner = filtered_points.min(dim=0)[0]
+        max_corner = filtered_points.max(dim=0)[0]
+        grid_shape = torch.ceil((max_corner - min_corner) / cell_size).long()
+        # Assign points to voxel indices
+        voxel_indices = torch.floor((filtered_points - min_corner) / cell_size).long()
+        # Map voxel index tuple to list of point indices
+        from collections import defaultdict
+        voxel_dict = defaultdict(list)
+        for i, idx in enumerate(voxel_indices):
+            voxel_key = tuple(idx.cpu().numpy())
+            voxel_dict[voxel_key].append(i)
+        # Compute average points per voxel
+        point_counts = [len(v) for v in voxel_dict.values()]
+        if len(point_counts) == 0:
+            avg_points = 0
+        else:
+            avg_points = sum(point_counts) / len(point_counts)
+        # Keep only the top N densest voxels
+        sorted_voxels = sorted(voxel_dict.items(), key=lambda x: len(x[1]), reverse=True)
+        self.hash_table = {}
+        for voxel_key, idx_list in sorted_voxels[:target_voxel_count]:
+            cell_coord = torch.tensor(voxel_key)
+            cell_hash = self._hash_cell_coords(cell_coord.unsqueeze(0))[0].item()
+            self.hash_table[cell_hash] = idx_list
+        # Store filtered points
+        self.points = filtered_points
+        self.normals = None
+        self.point_features = None
+        self.confidence = confidence[mask]
+        self.cell_sizes = torch.ones(len(filtered_points), device=points.device) * cell_size
+        print(f"Structured grid: {len(self.hash_table)} voxels (top {target_voxel_count} densest).")
+        print(f"Grid cell size: {cell_size:.3f}")
+        print(f"Bounding box: min {min_corner.detach().cpu().numpy()}, max {max_corner.detach().cpu().numpy()}")
