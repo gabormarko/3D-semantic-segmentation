@@ -46,6 +46,8 @@ def parse_args():
     grid_group.add_argument("--hash_size", type=int, default=2**20, help="Size of hash table")
     grid_group.add_argument("--max_points_per_cell", type=int, default=32, help="Maximum points per cell")
     grid_group.add_argument("--test_queries", type=int, default=1000, help="Number of test queries to perform")
+    grid_group.add_argument("--reg_grid", action="store_true", help="Use regular (structured) grid instead of adaptive hash grid")
+    grid_group.add_argument("--target_voxel_count", type=int, default=50000, help="Target number of voxels for regular (structured) grid")
     
     # I/O parameters
     io_group.add_argument("--output_dir", default="output/hash_grid", help="Output directory for visualizations")
@@ -113,8 +115,7 @@ def main():
     )
     print(f"Found {len(surface_points)} surface points")
     
-    # Calculate adaptive cell sizes based on density
-    # Use smaller cells in dense regions, larger in sparse regions
+    # Calculate cell sizes
     base_cell_size = scene_extent / 50  # Base size for sparse regions
     min_cell_size = base_cell_size * 0.2  # Much smaller cells in dense regions
     max_cell_size = base_cell_size * 1.5  # Larger cells in sparse regions
@@ -124,42 +125,65 @@ def main():
     print(f"Minimum cell size (dense regions): {min_cell_size:.3f}")
     print(f"Maximum cell size (sparse regions): {max_cell_size:.3f}")
     
-    # Create hash grid with adaptive cell sizing
+    # Create grid
     grid = HashGrid(
-        min_cell_size=min_cell_size,    # Very small cells in dense regions
-        max_cell_size=max_cell_size,    # Larger cells in sparse regions
+        min_cell_size=min_cell_size,
+        max_cell_size=max_cell_size,
         hash_size=args.hash_size,
         max_points_per_cell=args.max_points_per_cell,
         confidence_threshold=0.5,
         curvature_threshold=0.1,
-        concentration_weight=0.5,        # Increased weight for spatial concentration
-        density_weight=0.4,             # Increased weight for local density
-        curvature_weight=0.1            # Reduced weight for curvature
+        concentration_weight=0.5,
+        density_weight=0.4,
+        curvature_weight=0.1
     )
     
-    # Build grid with points and normals
-    grid.build(
-        points=surface_points,
-        normals=surface_normals,
-        confidence=None  # No confidence scores available yet
-    )
+    # Build grid
+    if args.reg_grid:
+        print("Building regular (structured) grid...")
+        # Compute bounding box to estimate cell size for ~50,000 voxels
+        min_corner = surface_points.min(dim=0)[0]
+        max_corner = surface_points.max(dim=0)[0]
+        bbox = max_corner - min_corner
+        target_voxels = args.target_voxel_count
+        cell_size = (bbox.prod().item() / target_voxels) ** (1/3)
+        cell_size = cell_size * 0.1  # Make grid even finer to increase number of non-empty voxels
+        print(f"Auto-tuned cell size for ~{target_voxels} voxels (after refinement): {cell_size:.3f}")
+        grid.build_structured_grid(
+            points=surface_points,
+            cell_size=cell_size,
+            confidence=None,
+            target_voxel_count=args.target_voxel_count
+        )
+        grid_type = "reg_grid"
+        voxel_count = len(grid.hash_table)
+    else:
+        print("Building adaptive hash grid...")
+        grid.build(
+            points=surface_points,
+            normals=surface_normals,
+            confidence=None
+        )
+        grid_type = "hash_grid"
+        voxel_count = len(grid.hash_table)
 
     # --- BEGIN: Filter out voxels with less than average points ---
-    # Count points per voxel
-    point_counts = [len(indices) for indices in grid.hash_table.values()]
-    if len(point_counts) == 0:
-        avg_points = 0
-    else:
-        avg_points = sum(point_counts) / len(point_counts)
+    if not args.reg_grid:
+        # Count points per voxel
+        point_counts = [len(indices) for indices in grid.hash_table.values()]
+        if len(point_counts) == 0:
+            avg_points = 0
+        else:
+            avg_points = sum(point_counts) / len(point_counts)
 
-    # Only keep voxels with at least the average number of points
-    filtered_hash_table = {}
-    for cell_hash, indices in grid.hash_table.items():
-        if len(indices) >= avg_points:
-            filtered_hash_table[cell_hash] = indices
-    grid.hash_table = filtered_hash_table
+        # Only keep voxels with at least the average number of points
+        filtered_hash_table = {}
+        for cell_hash, indices in grid.hash_table.items():
+            if len(indices) >= avg_points:
+                filtered_hash_table[cell_hash] = indices
+        grid.hash_table = filtered_hash_table
 
-    print(f"Filtered voxels: {len(grid.hash_table)} remain with >= average ({avg_points:.1f}) points per voxel")
+        print(f"Filtered voxels: {len(grid.hash_table)} remain with >= average ({avg_points:.1f}) points per voxel")
     # --- END: Filter out voxels with less than average points ---
     
     # Test queries
@@ -204,21 +228,21 @@ def main():
     print(f"Success rate: {total_success/total_queries*100:.1f}%")
     print(f"Average time per query: {total_time/total_queries*1000:.2f}ms")
     
-    # Visualize with memory optimization
+    # Visualization and output
     if args.save_ply:
-        # Extract scene name from model path
         scene_name = os.path.basename(os.path.normpath(args.model_path))
-        # Create filename with scene name and surface detection parameters
-        param_str = f"op{detector.opacity_threshold:.1f}_sc{detector.scale_threshold:.2f}_de{detector.density_threshold:.1f}_k{detector.k_neighbors}"
-        save_path = os.path.join(args.output_dir, f"{scene_name}_hash_grid_iter{args.iteration}_{param_str}")
-        print("Saving visualization (this may take a while)...")
-        # Save points and grid separately to reduce memory usage
-        print("Saving point cloud...")
-        grid.visualize_points(save_path + "_points.ply")
-        print("Saving grid visualization...")
-        grid.visualize_grid(save_path + "_grid.ply")
+        if args.reg_grid:
+            base_name = f"{scene_name}_reg_grid_{voxel_count}vox_iter{args.iteration}_op{detector.opacity_threshold}_sc{detector.scale_threshold}_de{detector.density_threshold}_k{detector.k_neighbors}"
+        else:
+            base_name = f"{scene_name}_hash_grid_iter{args.iteration}_op{detector.opacity_threshold}_sc{detector.scale_threshold}_de{detector.density_threshold}_k{detector.k_neighbors}"
+        points_path = os.path.join(args.output_dir, base_name + "_points.ply")
+        grid_path = os.path.join(args.output_dir, base_name + "_grid.ply")
+        grid.visualize_points(points_path)
+        grid.visualize_grid(grid_path)
+        print(f"Saved point cloud to {points_path}")
+        print(f"Saved grid visualization to {grid_path}")
     else:
-        print("Visualizing hash grid (this may take a while)...")
+        print(f"Visualizing {grid_type} (this may take a while)...")
         grid.visualize(None)
 
 if __name__ == "__main__":
