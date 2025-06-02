@@ -197,6 +197,79 @@ class HashGrid:
                         )
         return sub_voxels
 
+    def _voxel_intersection_volume(self, min1, max1, min2, max2):
+        """Compute the intersection volume between two axis-aligned boxes."""
+        overlap = np.maximum(0, np.minimum(max1, max2) - np.maximum(min1, min2))
+        return np.prod(overlap)
+
+    def _resolve_voxel_intersections(self, voxels, points):
+        """
+        Given a list of voxels [(cell_coord, cell_size, indices)], resolve intersections:
+        - If intersection > 80% of the smaller voxel, keep only the one with more points.
+        - If less, subdivide both voxels further.
+        """
+        resolved = []
+        used = set()
+        n = len(voxels)
+        for i in range(n):
+            if i in used:
+                continue
+            cell1, size1, idx1 = voxels[i]
+            min1 = cell1 * size1
+            max1 = min1 + size1
+            keep = True
+            for j in range(i+1, n):
+                if j in used:
+                    continue
+                cell2, size2, idx2 = voxels[j]
+                min2 = cell2 * size2
+                max2 = min2 + size2
+                inter_vol = self._voxel_intersection_volume(min1, max1, min2, max2)
+                vol1 = np.prod(max1 - min1)
+                vol2 = np.prod(max2 - min2)
+                if inter_vol > 0:
+                    frac1 = inter_vol / vol1
+                    frac2 = inter_vol / vol2
+                    if frac1 > 0.8 or frac2 > 0.8:
+                        # Remove the one with fewer points
+                        if len(idx1) >= len(idx2):
+                            used.add(j)
+                        else:
+                            keep = False
+                            break
+                    else:
+                        # Subdivide both, but only if neither is at min size and subdivision is meaningful
+                        if size1 <= self.min_cell_size or size2 <= self.min_cell_size:
+                            used.add(j)
+                            keep = False
+                            resolved.append((tuple(cell1), size1, tuple(idx1)))
+                            resolved.append((tuple(cell2), size2, tuple(idx2)))
+                            break
+                        # Subdivide both
+                        sub1 = self._subdivide_voxel(points, idx1, cell1, size1, self.max_points_per_cell)
+                        sub2 = self._subdivide_voxel(points, idx2, cell2, size2, self.max_points_per_cell)
+                        sub1_points = sum(len(s[2]) for s in sub1)
+                        sub2_points = sum(len(s[2]) for s in sub2)
+                        if (len(sub1) == 1 and sub1[0][1] == size1) or (len(sub2) == 1 and sub2[0][1] == size2):
+                            used.add(j)
+                            keep = False
+                            resolved.append((tuple(cell1), size1, tuple(idx1)))
+                            resolved.append((tuple(cell2), size2, tuple(idx2)))
+                            break
+                        if sub1_points == len(idx1) and sub2_points == len(idx2):
+                            used.add(j)
+                            keep = False
+                            resolved.append((tuple(cell1), size1, tuple(idx1)))
+                            resolved.append((tuple(cell2), size2, tuple(idx2)))
+                            break
+                        used.add(j)
+                        resolved.extend(self._resolve_voxel_intersections(sub1 + sub2, points))
+                        keep = False
+                        break
+            if keep and (tuple(cell1), size1, tuple(idx1)) not in resolved:
+                resolved.append((tuple(cell1), size1, tuple(idx1)))
+        return resolved
+
     def build(self, 
              points: torch.Tensor,
              normals: Optional[torch.Tensor] = None,
@@ -238,19 +311,22 @@ class HashGrid:
             initial_hash_table[cell_hash].append(i)
         # Subdivide voxels that are too dense
         self.hash_table.clear()
+        all_voxels = []
         for cell_hash, idx_list in initial_hash_table.items():
             if len(idx_list) > self.max_points_per_cell:
-                # Get the cell coordinate and size for this voxel
                 cell_coord = cell_coords[idx_list[0]].cpu().numpy()
                 cell_size = self.cell_sizes[idx_list[0]].item()
-                # Recursively subdivide
                 leaf_voxels = self._subdivide_voxel(filtered_points.detach().cpu().numpy(), idx_list, cell_coord, cell_size, self.max_points_per_cell)
-                for leaf_cell_coord, leaf_cell_size, leaf_indices in leaf_voxels:
-                    # Hash the leaf cell coordinate
-                    leaf_hash = self._hash_cell_coords(torch.tensor([leaf_cell_coord])).item()
-                    self.hash_table[leaf_hash] = leaf_indices
+                all_voxels.extend(leaf_voxels)
             else:
-                self.hash_table[cell_hash] = idx_list
+                cell_coord = cell_coords[idx_list[0]].cpu().numpy()
+                cell_size = self.cell_sizes[idx_list[0]].item()
+                all_voxels.append((cell_coord, cell_size, idx_list))
+        # Resolve intersections
+        all_voxels = self._resolve_voxel_intersections(all_voxels, filtered_points.detach().cpu().numpy())
+        for cell_coord, cell_size, idx_list in all_voxels:
+            leaf_hash = self._hash_cell_coords(torch.tensor([cell_coord])).item()
+            self.hash_table[leaf_hash] = idx_list
         # --- Filter out voxels with fewer than the average number of points ---
         # Count points per voxel
         voxel_point_counts = {h: len(idx_list) for h, idx_list in self.hash_table.items()}
