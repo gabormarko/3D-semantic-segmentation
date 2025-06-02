@@ -68,10 +68,25 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     if args.minkowski:
+        # --- BEGIN: Robust checkpoint search for Minkowski mode ---
+        chkpnt_dir = os.path.join(args.model_path, "chkpnts")
+        if not os.path.exists(chkpnt_dir):
+            chkpnt_dir = os.path.join(args.model_path, "point_cloud")
+        if args.iteration == -1:
+            args.iteration = searchForMaxIteration(chkpnt_dir)
+        # Find checkpoint file robustly
+        import glob, re
+        ckpt_pattern = os.path.join(chkpnt_dir, "*%d.pth" % args.iteration)
+        ckpt_files = glob.glob(ckpt_pattern)
+        if not ckpt_files:
+            # Try any .pth file with the right iteration number
+            ckpt_files = [f for f in glob.glob(os.path.join(chkpnt_dir, "*.pth")) if re.search(rf"[._-]{args.iteration}(?:\\.pth)?$", f)]
+        if not ckpt_files:
+            raise FileNotFoundError(f"No checkpoint found for iteration {args.iteration} in {chkpnt_dir}")
+        ckpt_path = ckpt_files[0]
+        print(f"[INFO] Loading checkpoint: {ckpt_path}")
         # Minimal model/scene loading for MinkowskiEngine output only
         gaussians = GaussianModel(0)
-        if args.iteration == -1:
-            args.iteration = searchForMaxIteration(os.path.join(args.model_path, "point_cloud"))
         model_parser = argparse.ArgumentParser()
         model_params = ModelParams(model_parser)
         model_params.model_path = args.model_path
@@ -89,10 +104,16 @@ def main():
         device = surface_points.device if hasattr(surface_points, 'device') else ('cuda' if torch.cuda.is_available() else 'cpu')
         if hasattr(gaussians, "get_features_dc"):
             colors = gaussians.get_features_dc.detach()
-            if colors.shape[1] == 1 and colors.shape[-1] == 3:
+            # Robustly extract RGB from possible shapes
+            if colors.ndim == 3 and colors.shape[1] == 1 and colors.shape[2] == 3:
                 colors = colors[:, 0, :]
+            elif colors.ndim == 2 and colors.shape[1] >= 3:
+                colors = colors[:, :3]
             else:
-                colors = torch.ones_like(surface_points)  # fallback
+                colors = torch.ones_like(surface_points)  # fallback to white
+            # Normalize if needed (assume >1 means not normalized)
+            if colors.max() > 1.0:
+                colors = colors / 255.0
         else:
             colors = torch.ones_like(surface_points)
         if not isinstance(surface_points, torch.Tensor):
@@ -124,7 +145,6 @@ def main():
         o3d.io.write_point_cloud(minkowski_grid_path, pcd)
         print(f"Saved MinkowskiEngine voxel grid to {minkowski_grid_path}")
         return
-
     # Create a new parser for ModelParams with only the required arguments
     model_parser = argparse.ArgumentParser()
     model_params = ModelParams(model_parser)
@@ -316,10 +336,16 @@ def main():
             surface_points_tensor = surface_points.to(device)
         if hasattr(gaussians, "get_features_dc"):
             colors = gaussians.get_features_dc.detach()
-            if colors.shape[1] == 1 and colors.shape[-1] == 3:
+            # Robustly extract RGB from possible shapes
+            if colors.ndim == 3 and colors.shape[1] == 1 and colors.shape[2] == 3:
                 colors = colors[:, 0, :]
+            elif colors.ndim == 2 and colors.shape[1] >= 3:
+                colors = colors[:, :3]
             else:
-                colors = torch.ones_like(surface_points_tensor)  # fallback
+                colors = torch.ones_like(surface_points_tensor)  # fallback to white
+            # Normalize if needed (assume >1 means not normalized)
+            if colors.max() > 1.0:
+                colors = colors / 255.0
         else:
             colors = torch.ones_like(surface_points_tensor)
         if not isinstance(colors, torch.Tensor):
