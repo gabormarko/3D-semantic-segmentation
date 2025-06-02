@@ -33,7 +33,13 @@ def main():
     gaussians = GaussianModel(0)
     if args.iteration == -1:
         from utils.system_utils import searchForMaxIteration
-        args.iteration = searchForMaxIteration(os.path.join(args.model_path, "point_cloud"))
+        chkpnt_dir = os.path.join(args.model_path, "chkpnts")
+        args.iteration = searchForMaxIteration(chkpnt_dir)
+        checkpoint_path = os.path.join(chkpnt_dir, f"iteration_{args.iteration}.pth")
+    else:
+        chkpnt_dir = os.path.join(args.model_path, "chkpnts")
+        checkpoint_path = os.path.join(chkpnt_dir, f"iteration_{args.iteration}.pth")
+        
     import argparse
     model_parser = argparse.ArgumentParser()
     model_params = ModelParams(model_parser)
@@ -48,14 +54,19 @@ def main():
     scene = Scene(model_params, gaussians, load_iteration=args.iteration)
     surface_points = gaussians.get_xyz
     device = surface_points.device if hasattr(surface_points, 'device') else ('cuda' if torch.cuda.is_available() else 'cpu')
-    if hasattr(gaussians, "get_features_dc"):
-        colors = gaussians.get_features_dc.detach()
-        if colors.shape[1] == 1 and colors.shape[-1] == 3:
-            colors = colors[:, 0, :]
+    # Use DC color if available, else gray
+    try:
+        colors = gaussians._features_dc.detach().cpu().numpy()  # shape [N, 1, 3]
+        if colors.shape[1] == 1 and colors.shape[2] == 3:
+            colors = colors[:, 0, :]  # Now shape [N, 3]
         else:
-            colors = torch.ones_like(surface_points)  # fallback
-    else:
-        colors = torch.ones_like(surface_points)
+            print("Warning: Unexpected DC color shape, using gray.")
+            colors = np.ones_like(surface_points.cpu().numpy()) * 0.5
+        colors = np.clip(colors, 0, 1)
+        colors = torch.from_numpy(colors).to(device)
+    except Exception as e:
+        print(f"Warning: Could not extract DC color ({{e}}). Exported points will be gray.")
+        colors = torch.ones_like(surface_points) * 0.5
     # --- Filter for dense surface regions (if available) ---
     if hasattr(gaussians, "get_opacity"):
         opacity = gaussians.get_opacity
@@ -75,7 +86,7 @@ def main():
         max_corner = np.max(surface_points, axis=0)
         bbox = max_corner - min_corner
         bbox_prod = np.prod(bbox)
-    target_voxels = 5000000*10
+    target_voxels = 5000000*1/2 # Adjusted target voxels for larger scenes
     voxel_size = (bbox_prod / target_voxels)
     print(f"Auto-tuned voxel size for ~{target_voxels} voxels: {voxel_size:.3f}")
 
