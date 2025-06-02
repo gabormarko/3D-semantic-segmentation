@@ -733,3 +733,59 @@ class HashGrid:
         print(f"Structured grid: {len(self.hash_table)} voxels (top {target_voxel_count} densest).")
         print(f"Grid cell size: {cell_size:.3f}")
         print(f"Bounding box: min {min_corner.detach().cpu().numpy()}, max {max_corner.detach().cpu().numpy()}")
+try:
+    import MinkowskiEngine as ME
+except ImportError:
+    ME = None
+    print("Warning: MinkowskiEngine is not installed. MinkowskiVoxelGrid will not be available.")
+
+class MinkowskiVoxelGrid:
+    def __init__(self, xyz: torch.Tensor, colors: Optional[torch.Tensor] = None, voxel_size: float = 0.05, device: str = 'cpu'):
+        """
+        Initialize a sparse voxel grid using MinkowskiEngine.
+        Args:
+            xyz: (N, 3) tensor of Gaussian centers (float, continuous coordinates)
+            colors: (N, 3) tensor of RGB colors (optional, for features)
+            voxel_size: Size of each voxel
+            device: Device for the sparse tensor
+        """
+        if ME is None:
+            raise ImportError("MinkowskiEngine is not installed.")
+        self.voxel_size = voxel_size
+        self.device = device
+        # Quantize coordinates to voxel indices
+        coords = torch.floor(xyz / voxel_size).int()
+        feats = None
+        if colors is not None:
+            feats = colors.float()
+        else:
+            feats = torch.ones((xyz.shape[0], 1), dtype=torch.float32)  # dummy feature
+        # Create sparse tensor
+        self.sparse_tensor = ME.SparseTensor(
+            features=feats.to(device),
+            coordinates=coords.to(device)
+        )
+        self.coords = coords
+        self.features = feats
+
+    def to(self, device):
+        self.sparse_tensor = self.sparse_tensor.to(device)
+        self.coords = self.coords.to(device)
+        self.features = self.features.to(device)
+        self.device = device
+        return self
+
+    def __len__(self):
+        return self.sparse_tensor.C.shape[0]
+
+    def get_voxel_centers(self):
+        # Always use the last 3 columns for (x, y, z) coordinates
+        return (self.sparse_tensor.C[:, -3:].float() + 0.5) * self.voxel_size
+
+    def get_features(self):
+        return self.sparse_tensor.F
+
+    def debug_print(self):
+        print(f"Minkowski Voxel Grid: {len(self)} voxels, voxel size {self.voxel_size}")
+        print(f"Voxel centers (first 5): {self.get_voxel_centers()[:5]}")
+        print(f"Features (first 5): {self.get_features()[:5]}")
