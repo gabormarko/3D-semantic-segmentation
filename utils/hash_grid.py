@@ -170,6 +170,33 @@ class HashGrid:
         
         return ((x * p1) ^ (y * p2) ^ (z * p3)) % self.hash_size
     
+    def _subdivide_voxel(self, points, indices, cell_coord, cell_size, max_points_per_cell, depth=0, max_depth=5):
+        """
+        Recursively subdivide a voxel if it contains too many points.
+        Returns a list of (cell_coord, cell_size, indices) for leaf voxels.
+        """
+        if len(indices) <= max_points_per_cell or depth >= max_depth:
+            return [(cell_coord, cell_size, indices)]
+        # Subdivide into 8 octants
+        sub_voxels = []
+        half = cell_size / 2.0
+        for dx in [0, 1]:
+            for dy in [0, 1]:
+                for dz in [0, 1]:
+                    offset = np.array([dx, dy, dz]) * half
+                    new_cell_coord = cell_coord * 2 + np.array([dx, dy, dz])
+                    new_cell_size = half
+                    # Find points in this sub-voxel
+                    min_corner = cell_coord * cell_size + offset
+                    max_corner = min_corner + half
+                    mask = np.all((points[indices] >= min_corner) & (points[indices] < max_corner), axis=1)
+                    sub_indices = [indices[i] for i, m in enumerate(mask) if m]
+                    if sub_indices:
+                        sub_voxels.extend(
+                            self._subdivide_voxel(points, sub_indices, new_cell_coord, new_cell_size, max_points_per_cell, depth+1, max_depth)
+                        )
+        return sub_voxels
+
     def build(self, 
              points: torch.Tensor,
              normals: Optional[torch.Tensor] = None,
@@ -187,38 +214,43 @@ class HashGrid:
         self.points = points
         self.normals = normals
         self.point_features = point_features
-        
-        # Set default confidence if not provided
         if confidence is None:
             confidence = torch.ones(len(points), device=points.device)
         self.confidence = confidence
-        
-        # Filter out low-confidence points
         mask = confidence > self.confidence_threshold
         filtered_points = points[mask]
         filtered_normals = normals[mask] if normals is not None else None
         filtered_confidence = confidence[mask]
-        
-        # Compute adaptive cell sizes
         self.cell_sizes = self.compute_adaptive_cell_sizes(
             filtered_points, 
             filtered_normals if filtered_normals is not None else torch.zeros_like(filtered_points),
             filtered_confidence
         )
-        
         # Get cell coordinates using adaptive cell sizes
         cell_coords = self._get_cell_coords(filtered_points, self.cell_sizes)
         cell_hashes = self._hash_cell_coords(cell_coords)
-        
-        # Build hash table
-        self.hash_table.clear()
+        # Build initial hash table
+        initial_hash_table = {}
         for i, cell_hash in enumerate(cell_hashes):
             cell_hash = cell_hash.item()
-            if cell_hash not in self.hash_table:
-                self.hash_table[cell_hash] = []
-            if len(self.hash_table[cell_hash]) < self.max_points_per_cell:
-                self.hash_table[cell_hash].append(i)
-
+            if cell_hash not in initial_hash_table:
+                initial_hash_table[cell_hash] = []
+            initial_hash_table[cell_hash].append(i)
+        # Subdivide voxels that are too dense
+        self.hash_table.clear()
+        for cell_hash, idx_list in initial_hash_table.items():
+            if len(idx_list) > self.max_points_per_cell:
+                # Get the cell coordinate and size for this voxel
+                cell_coord = cell_coords[idx_list[0]].cpu().numpy()
+                cell_size = self.cell_sizes[idx_list[0]].item()
+                # Recursively subdivide
+                leaf_voxels = self._subdivide_voxel(filtered_points.detach().cpu().numpy(), idx_list, cell_coord, cell_size, self.max_points_per_cell)
+                for leaf_cell_coord, leaf_cell_size, leaf_indices in leaf_voxels:
+                    # Hash the leaf cell coordinate
+                    leaf_hash = self._hash_cell_coords(torch.tensor([leaf_cell_coord])).item()
+                    self.hash_table[leaf_hash] = leaf_indices
+            else:
+                self.hash_table[cell_hash] = idx_list
         # --- Filter out voxels with fewer than the average number of points ---
         # Count points per voxel
         voxel_point_counts = {h: len(idx_list) for h, idx_list in self.hash_table.items()}
