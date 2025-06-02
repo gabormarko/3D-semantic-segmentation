@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import numpy as np
 
 # Add project root to Python path
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -11,7 +12,7 @@ import argparse
 from tqdm import tqdm
 
 from utils.surface_detection import SurfaceDetector
-from utils.hash_grid import HashGrid
+from utils.hash_grid import HashGrid, MinkowskiVoxelGrid
 from scene import Scene, GaussianModel
 from arguments import ModelParams, PipelineParams
 from utils.system_utils import searchForMaxIteration
@@ -55,7 +56,8 @@ def parse_args():
     
     # Add new arguments
     parser.add_argument("--query_batch_size", type=int, default=100,
-                      help="Number of queries to process in each batch")
+                      help="Number of queries to process in each batch")    
+    parser.add_argument("--minkowski", action="store_true", help="Only run the MinkowskiEngine voxel grid output and skip other processing.")
     
     return parser.parse_args()
 
@@ -64,7 +66,65 @@ def main():
     
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
-    
+
+    if args.minkowski:
+        # Minimal model/scene loading for MinkowskiEngine output only
+        gaussians = GaussianModel(0)
+        if args.iteration == -1:
+            args.iteration = searchForMaxIteration(os.path.join(args.model_path, "point_cloud"))
+        model_parser = argparse.ArgumentParser()
+        model_params = ModelParams(model_parser)
+        model_params.model_path = args.model_path
+        model_params.source_path = args.source_path
+        model_params.images = args.images
+        model_params.eval = args.eval
+        model_params.object_path = args.object_path
+        model_params.n_views = args.n_views
+        model_params.random_init = args.random_init
+        model_params.train_split = args.train_split
+        scene = Scene(model_params, gaussians, load_iteration=args.iteration)
+        # Use all points for Minkowski grid
+        surface_points = gaussians.get_xyz
+        # Use DC color if available, else white
+        device = surface_points.device if hasattr(surface_points, 'device') else ('cuda' if torch.cuda.is_available() else 'cpu')
+        if hasattr(gaussians, "get_features_dc"):
+            colors = gaussians.get_features_dc.detach()
+            if colors.shape[1] == 1 and colors.shape[-1] == 3:
+                colors = colors[:, 0, :]
+            else:
+                colors = torch.ones_like(surface_points)  # fallback
+        else:
+            colors = torch.ones_like(surface_points)
+        if not isinstance(surface_points, torch.Tensor):
+            surface_points_tensor = torch.from_numpy(np.asarray(surface_points)).to(device)
+        else:
+            surface_points_tensor = surface_points.to(device)
+        if not isinstance(colors, torch.Tensor):
+            colors = torch.from_numpy(np.asarray(colors)).to(device)
+        else:
+            colors = colors.to(device)
+        print(f"[DEBUG] surface_points_tensor type: {type(surface_points_tensor)}, device: {surface_points_tensor.device}")
+        print(f"[DEBUG] colors type: {type(colors)}, device: {colors.device}")
+        minkowski_grid = MinkowskiVoxelGrid(surface_points_tensor, colors=colors, voxel_size=args.cell_size, device=device)
+        scene_name = os.path.basename(os.path.normpath(args.model_path))
+        minkowski_base = f"{scene_name}_minkowski_{len(minkowski_grid)}vox_iter{args.iteration}"
+        minkowski_points_path = os.path.join(args.output_dir, minkowski_base + "_points.ply")
+        minkowski_grid_path = os.path.join(args.output_dir, minkowski_base + "_grid.ply")
+        import open3d as o3d
+        voxel_centers = minkowski_grid.get_voxel_centers().cpu().numpy()
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(voxel_centers)
+        feats = minkowski_grid.get_features().cpu().numpy()
+        if feats.shape[1] == 3:
+            pcd.colors = o3d.utility.Vector3dVector(np.clip(feats, 0, 1))
+        else:
+            pcd.colors = o3d.utility.Vector3dVector(np.ones_like(voxel_centers))
+        o3d.io.write_point_cloud(minkowski_points_path, pcd)
+        print(f"Saved MinkowskiEngine voxel centers to {minkowski_points_path}")
+        o3d.io.write_point_cloud(minkowski_grid_path, pcd)
+        print(f"Saved MinkowskiEngine voxel grid to {minkowski_grid_path}")
+        return
+
     # Create a new parser for ModelParams with only the required arguments
     model_parser = argparse.ArgumentParser()
     model_params = ModelParams(model_parser)
@@ -157,18 +217,10 @@ def main():
         )
         grid_type = "reg_grid"
         voxel_count = len(grid.hash_table)
-    else:
-        print("Building adaptive hash grid...")
-        grid.build(
-            points=surface_points,
-            normals=surface_normals,
-            confidence=None
-        )
-        grid_type = "hash_grid"
-        voxel_count = len(grid.hash_table)
+
 
     # --- BEGIN: Filter out voxels with less than average points ---
-    if not args.reg_grid:
+    if args.minkowski:
         # Count points per voxel
         point_counts = [len(indices) for indices in grid.hash_table.values()]
         if len(point_counts) == 0:
@@ -185,6 +237,15 @@ def main():
 
         print(f"Filtered voxels: {len(grid.hash_table)} remain with >= average ({avg_points:.1f}) points per voxel")
     # --- END: Filter out voxels with less than average points ---
+    else:
+        print("Building adaptive hash grid...")
+        grid.build(
+            points=surface_points,
+            normals=surface_normals,
+            confidence=None
+        )
+        grid_type = "hash_grid"
+        voxel_count = len(grid.hash_table)
     
     # Test queries
     print(f"\nPerforming {args.test_queries} test queries...")
@@ -244,6 +305,53 @@ def main():
     else:
         print(f"Visualizing {grid_type} (this may take a while)...")
         grid.visualize(None)
+
+    # After extracting surface points, create Minkowski voxel grid for debugging
+    try:
+        # Ensure surface_points and colors are torch tensors on the correct device
+        device = surface_points.device if hasattr(surface_points, 'device') else ('cuda' if torch.cuda.is_available() else 'cpu')
+        if not isinstance(surface_points, torch.Tensor):
+            surface_points_tensor = torch.from_numpy(np.asarray(surface_points)).to(device)
+        else:
+            surface_points_tensor = surface_points.to(device)
+        if hasattr(gaussians, "get_features_dc"):
+            colors = gaussians.get_features_dc.detach()
+            if colors.shape[1] == 1 and colors.shape[-1] == 3:
+                colors = colors[:, 0, :]
+            else:
+                colors = torch.ones_like(surface_points_tensor)  # fallback
+        else:
+            colors = torch.ones_like(surface_points_tensor)
+        if not isinstance(colors, torch.Tensor):
+            colors = torch.from_numpy(np.asarray(colors)).to(device)
+        else:
+            colors = colors.to(device)
+        # Debug: print types and devices
+        print(f"[DEBUG] surface_points_tensor type: {type(surface_points_tensor)}, device: {surface_points_tensor.device}")
+        print(f"[DEBUG] colors type: {type(colors)}, device: {colors.device}")
+        minkowski_grid = MinkowskiVoxelGrid(surface_points_tensor, colors=colors, voxel_size=args.cell_size, device=device)
+        scene_name = os.path.basename(os.path.normpath(args.model_path))
+        minkowski_base = f"{scene_name}_minkowski_{len(minkowski_grid)}vox_iter{args.iteration}_op{detector.opacity_threshold}_sc{detector.scale_threshold}_de{detector.density_threshold}_k{detector.k_neighbors}"
+        minkowski_points_path = os.path.join(args.output_dir, minkowski_base + "_points.ply")
+        minkowski_grid_path = os.path.join(args.output_dir, minkowski_base + "_grid.ply")
+        # Save voxel centers as point cloud
+        import open3d as o3d
+        voxel_centers = minkowski_grid.get_voxel_centers().cpu().numpy()
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(voxel_centers)
+        # Use features as colors if available
+        feats = minkowski_grid.get_features().cpu().numpy()
+        if feats.shape[1] == 3:
+            pcd.colors = o3d.utility.Vector3dVector(np.clip(feats, 0, 1))
+        else:
+            pcd.colors = o3d.utility.Vector3dVector(np.ones_like(voxel_centers))
+        o3d.io.write_point_cloud(minkowski_points_path, pcd)
+        print(f"Saved MinkowskiEngine voxel centers to {minkowski_points_path}")
+        # Optionally, save a voxel grid mesh (as points only for now)
+        o3d.io.write_point_cloud(minkowski_grid_path, pcd)
+        print(f"Saved MinkowskiEngine voxel grid to {minkowski_grid_path}")
+    except Exception as e:
+        print(f"[MinkowskiEngine] Skipping Minkowski voxel grid output: {e}")
 
 if __name__ == "__main__":
     main()
