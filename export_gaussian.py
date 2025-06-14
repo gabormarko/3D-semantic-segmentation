@@ -55,10 +55,9 @@ def export_gaussians_to_ply(gaussians, output_ply):
     o3d.io.write_point_cloud(output_ply, pcd)
     print(f"Exported {xyz.shape[0]} Gaussians as points to {output_ply}")
 
-def export_gaussian_ellipsoids_to_mesh(gaussians, output_mesh, max_ellipsoids=10000, scale_factor = 1.0):
+def export_gaussian_ellipsoids_to_mesh(gaussians, output_mesh, max_ellipsoids=10000):
     xyz = gaussians.get_xyz.detach().cpu().numpy()
     scales = gaussians.get_scaling.detach().cpu().numpy()
-    scales = scales * scale_factor # for different sized Gaussians in output
     # Use DC color if available, else gray
     try:
         colors = gaussians._features_dc.detach().cpu().numpy()  # shape [N, 1, 3]
@@ -135,7 +134,6 @@ if __name__ == "__main__":
     if len(chkpnt_files) == 0:
         print(f"No .pth files found in {chkpnt_folder}")
     else:
-        scale_factors = [0.1, 0.25, 1.0]
         for input_path in chkpnt_files:
             base_name = os.path.splitext(os.path.basename(input_path))[0]
             points_ply = os.path.join(output_folder, f"out_{base_name}_points.ply")
@@ -144,11 +142,8 @@ if __name__ == "__main__":
 
             gaussians = load_gaussians_from_checkpoint(input_path)
             export_gaussians_to_ply(gaussians, points_ply)
-            for factor in scale_factors:
-                suffix = f"{int(factor * 100)}"
-                ellipsoids_ply = os.path.join(output_folder, f"out_{base_name}_ellipsoids_{suffix}.ply")
-                export_gaussian_ellipsoids_to_mesh(
-                    gaussians,
-                    ellipsoids_ply,
-                    scale_factor=factor
-                ) 
+            ellipsoids_ply = os.path.join(output_folder, f"out_{base_name}_ellipsoids_{suffix}.ply")
+            export_gaussian_ellipsoids_to_mesh(
+                gaussians,
+                ellipsoids_ply
+            ) 

@@ -1,0 +1,4161 @@
+diff --git a/MinkowskiEngine b/MinkowskiEngine
+deleted file mode 160000
+index aa77ece..0000000
+--- a/MinkowskiEngine
++++ /dev/null
+@@ -1 +0,0 @@
+-Subproject commit aa77ece0ab54225eb193df219034981739260fc2
+diff --git a/README.md b/README.md
+index 860d33b..4f141b3 100644
+--- a/README.md
++++ b/README.md
+@@ -32,6 +32,7 @@
+ ### How to use the code. 
+ To use Unified-Lift, please refer to the [Usage](doc/Usage.md) guide. (currently under construction).
+ 
++### Test
+ 
+ # Citation
+ If you find this work useful in your research, please cite our paper:
+diff --git a/Tracking-Anything-with-DEVA/deva/inference/__pycache__/result_utils.cpython-38.pyc.139919336149488 b/Tracking-Anything-with-DEVA/deva/inference/__pycache__/result_utils.cpython-38.pyc.139919336149488
+deleted file mode 100644
+index e3f193a..0000000
+Binary files a/Tracking-Anything-with-DEVA/deva/inference/__pycache__/result_utils.cpython-38.pyc.139919336149488 and /dev/null differ
+diff --git a/Tracking-Anything-with-DEVA/deva/inference/data/__init__.py b/Tracking-Anything-with-DEVA/deva/inference/data/__init__.py
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/Tracking-Anything-with-DEVA/deva/inference/data/detection_video_reader.py b/Tracking-Anything-with-DEVA/deva/inference/data/detection_video_reader.py
+deleted file mode 100644
+index 945706a..0000000
+--- a/Tracking-Anything-with-DEVA/deva/inference/data/detection_video_reader.py
++++ /dev/null
+@@ -1,126 +0,0 @@
+-import os
+-from os import path
+-
+-from torch.utils.data.dataset import Dataset
+-from torchvision import transforms
+-from torchvision.transforms import InterpolationMode
+-import torch.nn.functional as F
+-from PIL import Image
+-import numpy as np
+-
+-from deva.dataset.utils import im_normalization
+-
+-
+-class DetectionVideoReader(Dataset):
+-    """
+-    This class is used to read a video, one frame at a time
+-    """
+-    def __init__(self,
+-                 vid_name,
+-                 image_dir,
+-                 mask_dir,
+-                 size=-1,
+-                 to_save=None,
+-                 size_dir=None,
+-                 start=-1,
+-                 end=-1,
+-                 reverse=False):
+-        """
+-        image_dir - points to a directory of jpg images
+-        mask_dir - points to a directory of png masks
+-        size - resize min. side to size. Does nothing if <0.
+-        to_save - optionally contains a list of file names without extensions 
+-            where the segmentation mask is required
+-        """
+-        # TODO: determine if_rgb automatically
+-        self.vid_name = vid_name
+-        self.image_dir = image_dir
+-        self.mask_dir = mask_dir
+-        self.to_save = to_save
+-        if size_dir is None:
+-            self.size_dir = self.image_dir
+-        else:
+-            self.size_dir = size_dir
+-
+-        self.frames = sorted(os.listdir(self.image_dir))
+-        if start > 0:
+-            self.frames = self.frames[start:]
+-        if end > 0:
+-            self.frames = self.frames[:end]
+-        if reverse:
+-            self.frames = reversed(self.frames)
+-
+-        self.palette = Image.open(path.join(mask_dir, self.frames[0].replace('.jpg',
+-                                                                             '.png'))).getpalette()
+-        self.first_gt_path = path.join(self.mask_dir, self.frames[0].replace('.jpg', '.png'))
+-
+-        if size < 0:
+-            self.im_transform = transforms.Compose([
+-                transforms.ToTensor(),
+-                im_normalization,
+-            ])
+-            self.mask_transform = transforms.Compose([])
+-        else:
+-            self.im_transform = transforms.Compose([
+-                transforms.ToTensor(),
+-                im_normalization,
+-                transforms.Resize(size, interpolation=InterpolationMode.BILINEAR, antialias=True),
+-            ])
+-            self.mask_transform = transforms.Compose([
+-                transforms.Resize(size, interpolation=InterpolationMode.NEAREST),
+-            ])
+-        self.size = size
+-        self.is_rgb = None
+-
+-    def __getitem__(self, idx):
+-        frame = self.frames[idx]
+-        info = {}
+-        data = {}
+-        info['frame'] = frame
+-        info['save'] = (self.to_save is None) or (frame[:-4] in self.to_save)
+-
+-        im_path = path.join(self.image_dir, frame)
+-        img = Image.open(im_path).convert('RGB')
+-
+-        if self.image_dir == self.size_dir:
+-            shape = np.array(img).shape[:2]
+-        else:
+-            size_path = path.join(self.size_dir, frame)
+-            size_im = Image.open(size_path).convert('RGB')
+-            shape = np.array(size_im).shape[:2]
+-
+-        mask_path = path.join(self.mask_dir, frame[:-4] + '.png')
+-        img = self.im_transform(img)
+-
+-        if path.exists(mask_path):
+-            mask = Image.open(mask_path)
+-            mask = self.mask_transform(mask)
+-            if mask.mode == 'RGB':
+-                mask = np.array(mask, dtype=np.int32)
+-                mask = mask[:, :, 0] + mask[:, :, 1] * 256 + mask[:, :, 2] * 256 * 256
+-                self.is_rgb = True
+-            else:
+-                mask = mask.convert('P')
+-                mask = np.array(mask, dtype=np.int32)
+-                self.is_rgb = False
+-            data['mask'] = mask
+-
+-        # defer json loading to the model
+-        json_path = path.join(self.mask_dir, frame[:-4] + '.json')
+-        if path.exists(json_path):
+-            info['json'] = json_path
+-
+-        info['is_rgb'] = self.is_rgb
+-        info['shape'] = shape
+-        info['need_resize'] = not (self.size < 0)
+-        info['path_to_image'] = im_path
+-        data['rgb'] = img
+-        data['info'] = info
+-
+-        return data
+-
+-    def get_palette(self):
+-        return self.palette
+-
+-    def __len__(self):
+-        return len(self.frames)
+\ No newline at end of file
+diff --git a/Tracking-Anything-with-DEVA/deva/inference/data/referring_test_datasets.py b/Tracking-Anything-with-DEVA/deva/inference/data/referring_test_datasets.py
+deleted file mode 100644
+index ff01131..0000000
+--- a/Tracking-Anything-with-DEVA/deva/inference/data/referring_test_datasets.py
++++ /dev/null
+@@ -1,141 +0,0 @@
+-import os
+-from os import path
+-import json
+-from collections import defaultdict
+-import numpy as np
+-
+-from deva.inference.data.video_reader import VideoReader
+-
+-
+-class ReferringDAVISTestDataset:
+-    def __init__(self, image_dir, mask_dir, size=-1):
+-        self.image_dir = image_dir
+-        self.mask_dir = mask_dir
+-        self.size = size
+-
+-        self.vid_list = sorted(os.listdir(self.mask_dir))
+-
+-    def get_videos(self):
+-        return self.vid_list
+-
+-    def get_offline_sampled_frames(self, video, num_sampled_frames):
+-        return VideoReader(
+-            video,
+-            path.join(self.image_dir, video),
+-            path.join(self.mask_dir, video),
+-            to_save=[name[:-4] for name in os.listdir(path.join(self.mask_dir, video))],
+-            size=self.size,
+-            soft_mask=True,
+-            num_sampled_frames=num_sampled_frames,
+-            use_all_masks=True,
+-        )
+-
+-    def get_partial_video_loader(self, video, *, start, end, reverse):
+-        return VideoReader(
+-            video,
+-            path.join(self.image_dir, video),
+-            path.join(self.mask_dir, video),
+-            to_save=[name[:-4] for name in os.listdir(path.join(self.mask_dir, video))],
+-            size=self.size,
+-            soft_mask=True,
+-            start=start,
+-            end=end,
+-            reverse=reverse,
+-        )
+-
+-    def get_scores(self, video):
+-        with open(path.join(self.mask_dir, video, 'scores.csv')) as f:
+-            lines = f.read().splitlines()
+-        scores = defaultdict(dict)
+-        for l in lines:
+-            frame, obj, score = l.split(',')
+-            scores[frame[:-4]][obj] = float(score)
+-
+-        average_scores = {}
+-        for frame, all_objects in scores.items():
+-            average_scores[frame] = np.array(list(all_objects.values())).mean()
+-
+-        return average_scores
+-
+-    def __len__(self):
+-        return len(self.vid_list)
+-
+-
+-class ReferringYouTubeVOSTestDataset:
+-    def __init__(self, image_dir, mask_dir, json_dir, size=-1):
+-        self.image_dir = image_dir
+-        self.mask_dir = mask_dir
+-        self.size = size
+-
+-        self.vid_list = sorted(os.listdir(self.mask_dir))
+-        self.req_frame_list = {}
+-
+-        with open(json_dir) as f:
+-            # read meta.json to know which frame is required for evaluation
+-            meta = json.load(f)['videos']
+-
+-            for vid in self.vid_list:
+-                req_frames = []
+-                req_frames.extend(meta[vid]['frames'])
+-
+-                req_frames = list(set(req_frames))
+-                self.req_frame_list[vid] = req_frames
+-
+-    def get_videos(self):
+-        return self.vid_list
+-
+-    def get_objects(self, video):
+-        return [
+-            obj for obj in sorted(os.listdir(path.join(self.mask_dir, video))) if '.csv' not in obj
+-        ]
+-
+-    def _get_to_save_list(self, video, object_name):
+-        return self.req_frame_list[video]
+-
+-    def get_offline_sampled_frames(self, video, object_name, num_sampled_frames):
+-        return VideoReader(
+-            video,
+-            path.join(self.image_dir, video),
+-            path.join(self.mask_dir, video),
+-            size=self.size,
+-            soft_mask=True,
+-            num_sampled_frames=num_sampled_frames,
+-            use_all_masks=True,
+-            to_save=self._get_to_save_list(video, object_name),
+-            object_name=object_name,
+-            enabled_frame_list=self._get_enabled_frame_list(video, object_name),
+-        )
+-
+-    def get_partial_video_loader(self, video, object_name, *, start, end, reverse):
+-        return VideoReader(
+-            video,
+-            path.join(self.image_dir, video),
+-            path.join(self.mask_dir, video),
+-            size=self.size,
+-            soft_mask=True,
+-            start=start,
+-            end=end,
+-            reverse=reverse,
+-            to_save=self._get_to_save_list(video, object_name),
+-            object_name=object_name,
+-            enabled_frame_list=self._get_enabled_frame_list(video, object_name),
+-        )
+-
+-    def get_scores(self, video):
+-        with open(path.join(self.mask_dir, video, 'scores.csv')) as f:
+-            lines = f.read().splitlines()
+-        scores = defaultdict(dict)
+-        enabled_frame_list = self._get_enabled_frame_list(video, None)
+-        for l in lines:
+-            frame, obj, score = l.split(',')
+-            if enabled_frame_list is not None and frame[:-4] not in enabled_frame_list:
+-                continue
+-            scores[obj][frame[:-4]] = float(score)
+-        return scores
+-
+-    def _get_enabled_frame_list(self, video, object_name):
+-        # None -> enable all
+-        return None
+-
+-    def __len__(self):
+-        return len(self.vid_list)
+diff --git a/Tracking-Anything-with-DEVA/deva/inference/data/saliency_test_datasets.py b/Tracking-Anything-with-DEVA/deva/inference/data/saliency_test_datasets.py
+deleted file mode 100644
+index 52f431e..0000000
+--- a/Tracking-Anything-with-DEVA/deva/inference/data/saliency_test_datasets.py
++++ /dev/null
+@@ -1,63 +0,0 @@
+-import os
+-from os import path
+-
+-from deva.inference.data.video_reader import VideoReader
+-
+-
+-class DAVISSaliencyTestDataset:
+-    def __init__(self, image_dir, mask_dir, imset=None, size=-1):
+-        self.image_dir = image_dir
+-        self.mask_dir = mask_dir
+-        self.size = size
+-
+-        if imset is None:
+-            self.vid_list = sorted(os.listdir(self.mask_dir))
+-        else:
+-            with open(imset) as f:
+-                self.vid_list = sorted([line.strip() for line in f])
+-
+-    def get_datasets(self):
+-        for video in self.vid_list:
+-            yield VideoReader(
+-                video,
+-                path.join(self.image_dir, video),
+-                path.join(self.mask_dir, video),
+-                to_save=[name[:-4] for name in os.listdir(path.join(self.mask_dir, video))],
+-                size=self.size,
+-                soft_mask=True,
+-                use_all_masks=True,
+-                multi_object=False,
+-            )
+-
+-    def get_videos(self):
+-        return self.vid_list
+-
+-    def get_offline_sampled_frames(self, video, num_sampled_frames):
+-        return VideoReader(
+-            video,
+-            path.join(self.image_dir, video),
+-            path.join(self.mask_dir, video),
+-            to_save=[name[:-4] for name in os.listdir(path.join(self.mask_dir, video))],
+-            size=self.size,
+-            soft_mask=True,
+-            num_sampled_frames=num_sampled_frames,
+-            use_all_masks=True,
+-            multi_object=False,
+-        )
+-
+-    def get_partial_video_loader(self, video, *, start, end, reverse):
+-        return VideoReader(
+-            video,
+-            path.join(self.image_dir, video),
+-            path.join(self.mask_dir, video),
+-            to_save=[name[:-4] for name in os.listdir(path.join(self.mask_dir, video))],
+-            size=self.size,
+-            soft_mask=True,
+-            start=start,
+-            end=end,
+-            reverse=reverse,
+-            multi_object=False,
+-        )
+-
+-    def __len__(self):
+-        return len(self.vid_list)
+\ No newline at end of file
+diff --git a/Tracking-Anything-with-DEVA/deva/inference/data/simple_video_reader.py b/Tracking-Anything-with-DEVA/deva/inference/data/simple_video_reader.py
+deleted file mode 100644
+index 3060386..0000000
+--- a/Tracking-Anything-with-DEVA/deva/inference/data/simple_video_reader.py
++++ /dev/null
+@@ -1,40 +0,0 @@
+-import os
+-from os import path
+-from torch.utils.data.dataset import Dataset
+-from PIL import Image
+-import numpy as np
+-
+-
+-class SimpleVideoReader(Dataset):
+-    """
+-    This class is used to read a video, one frame at a time
+-    This simple version:
+-    1. Does not load the mask/json
+-    2. Does not normalize the input
+-    3. Does not resize
+-    """
+-    def __init__(
+-        self,
+-        image_dir,
+-    ):
+-        """
+-        image_dir - points to a directory of jpg images
+-        """
+-        self.image_dir = image_dir
+-        self.frames = sorted(os.listdir(self.image_dir))
+-
+-    def __getitem__(self, idx):
+-        frame = self.frames[idx]
+-
+-        im_path = path.join(self.image_dir, frame)
+-        img = Image.open(im_path).convert('RGB')
+-        img = np.array(img)
+-
+-        return img, im_path
+-    
+-    def __len__(self):
+-        return len(self.frames)
+-    
+-
+-def no_collate(x):
+-    return x
+\ No newline at end of file
+diff --git a/Tracking-Anything-with-DEVA/deva/inference/data/video_reader.py b/Tracking-Anything-with-DEVA/deva/inference/data/video_reader.py
+deleted file mode 100644
+index 719aadb..0000000
+--- a/Tracking-Anything-with-DEVA/deva/inference/data/video_reader.py
++++ /dev/null
+@@ -1,239 +0,0 @@
+-from typing import Dict, List, Optional
+-import os
+-from os import path
+-import copy
+-
+-import torch
+-from torch.utils.data.dataset import Dataset
+-from torchvision import transforms
+-from torchvision.transforms import InterpolationMode
+-from PIL import Image
+-import numpy as np
+-import pycocotools.mask as mask_utils
+-
+-from deva.dataset.utils import im_normalization
+-
+-
+-class VideoReader(Dataset):
+-    """
+-    This class is used to read a video, one frame at a time
+-    """
+-    def __init__(
+-        self,
+-        vid_name,
+-        image_dir,
+-        mask_dir,
+-        *,
+-        size=-1,
+-        to_save=None,
+-        use_all_masks=False,
+-        size_dir=None,
+-        start=-1,
+-        end=-1,
+-        num_sampled_frames=-1,
+-        reverse=False,
+-        soft_mask=False,
+-        object_name=None,
+-        multi_object=True,
+-        segmentation_from_dict: Optional[Dict[str, Dict]] = None,
+-        enabled_frame_list: Optional[List[str]] = None,
+-    ):
+-        """
+-        image_dir - points to a directory of jpg images
+-        mask_dir - points to a directory of png masks
+-        size - resize min. side to size. Does nothing if <0.
+-        to_save - optionally contains a list of file names without extensions 
+-            where the segmentation mask is required
+-        use_all_masks - when true, read all available mask in mask_dir.
+-            Default false. Set to true for YouTubeVOS validation.
+-        soft_mask - read (from sub-folders) and return soft probability mask
+-        object_name - if none, read from all objects. if not none, read that object only. 
+-                        only valid in soft mask mode
+-        segmentation_from_dict - if not None, read segmentation from this dictionary instead
+-        """
+-        self.vid_name = vid_name
+-        self.image_dir = image_dir
+-        self.mask_dir = mask_dir
+-        self.to_save = to_save
+-        self.use_all_mask = use_all_masks
+-        self.soft_mask = soft_mask
+-        self.object_name = object_name
+-        self.multi_object = multi_object
+-        self.segmentation_from_dict = segmentation_from_dict
+-        self.enabled_frame_list = enabled_frame_list
+-        if size_dir is None:
+-            self.size_dir = self.image_dir
+-        else:
+-            self.size_dir = size_dir
+-
+-        if segmentation_from_dict is None:
+-            # read all frames in the image directory
+-            self.frames = sorted(os.listdir(self.image_dir))
+-        else:
+-            # read frames from the dictionary
+-            first_frame = sorted(os.listdir(self.image_dir))[0]
+-            extension = first_frame[-4:]
+-            self.frames = sorted(segmentation_from_dict.keys())
+-            # add extensions -- pretty dumb but simple
+-            self.frames = [f + extension for f in self.frames]
+-
+-        if enabled_frame_list is not None:
+-            self.frames = [f for f in self.frames if f[:-4] in enabled_frame_list]
+-
+-        # enforce start and end frame if needed
+-        self._all_frames = copy.deepcopy(self.frames)
+-        if start >= 0:
+-            if end >= 0:
+-                self.frames = self.frames[start:end]
+-            else:
+-                self.frames = self.frames[start:]
+-        elif end >= 0:
+-            self.frames = self.frames[:end]
+-
+-        if num_sampled_frames > 0:
+-            # https://stackoverflow.com/a/9873804/3237438
+-            assert start < 0 and end < 0
+-            m = num_sampled_frames
+-            n = len(self.frames)
+-            m = min(m, n)
+-            indices = [i * n // m + n // (2 * m) for i in range(m)]
+-            self.frames = [self.frames[i] for i in indices]
+-
+-        if reverse:
+-            self.frames = list(reversed(self.frames))
+-
+-        if self.segmentation_from_dict is not None:
+-            # decoding masks from the dict
+-            self.palette = None
+-            self.first_mask_frame = self.frames[0]
+-        elif soft_mask:
+-            # reading probability masks
+-            self.palette = None
+-            if multi_object:
+-                if object_name is not None:
+-                    # pick one of many objects, soft mask
+-                    self.mask_dir = path.join(self.mask_dir, object_name)
+-                    self.first_mask_frame = sorted(os.listdir(self.mask_dir))[0]
+-                else:
+-                    # use all objects, soft mask
+-                    self.prob_folders = sorted(os.listdir(self.mask_dir))
+-                    self.prob_folders = [f for f in self.prob_folders if '.csv' not in f]
+-                    self.first_mask_frame = sorted(
+-                        os.listdir(path.join(self.mask_dir, self.prob_folders[0])))[0]
+-            else:
+-                # single object soft mask
+-                self.mask_dir = path.join(self.mask_dir)
+-                self.first_mask_frame = sorted(os.listdir(self.mask_dir))[0]
+-        else:
+-            # reading ID masks with palette
+-            self.palette = Image.open(path.join(mask_dir,
+-                                                sorted(os.listdir(mask_dir))[0])).getpalette()
+-            self.first_mask_frame = sorted(os.listdir(self.mask_dir))[0]
+-
+-        if size < 0:
+-            self.im_transform = transforms.Compose([
+-                transforms.ToTensor(),
+-                im_normalization,
+-            ])
+-            self.mask_transform = transforms.Compose([])
+-        else:
+-            self.im_transform = transforms.Compose([
+-                transforms.ToTensor(),
+-                im_normalization,
+-                transforms.Resize(size, interpolation=InterpolationMode.BILINEAR, antialias=True),
+-            ])
+-            if self.soft_mask:
+-                self.mask_transform = transforms.Compose([
+-                    transforms.Resize(size,
+-                                      interpolation=InterpolationMode.BILINEAR,
+-                                      antialias=True),
+-                ])
+-            else:
+-                self.mask_transform = transforms.Compose([
+-                    transforms.Resize(size, interpolation=InterpolationMode.NEAREST),
+-                ])
+-        self.size = size
+-
+-    def __getitem__(self, idx):
+-        frame = self.frames[idx]
+-        info = {}
+-        data = {}
+-        info['frame'] = frame
+-        info['save'] = (self.to_save is None) or (frame[:-4] in self.to_save)
+-
+-        im_path = path.join(self.image_dir, frame)
+-        img = Image.open(im_path).convert('RGB')
+-
+-        if self.image_dir == self.size_dir:
+-            shape = np.array(img).shape[:2]
+-        else:
+-            size_path = path.join(self.size_dir, frame)
+-            size_im = Image.open(size_path).convert('RGB')
+-            shape = np.array(size_im).shape[:2]
+-        img = self.im_transform(img)
+-
+-        load_mask = self.use_all_mask or (frame[:-4] == self.first_mask_frame[:-4])
+-
+-        if load_mask:
+-            if self.segmentation_from_dict is not None:
+-                # decoding masks from the dict
+-                pred = self.segmentation_from_dict[frame[:-4]][self.object_name]
+-                mask = mask_utils.decode(pred['segmentation'])
+-                mask = self.mask_transform(mask)
+-                all_masks = torch.FloatTensor(np.array(mask)).unsqueeze(0)
+-                valid_labels = torch.LongTensor(list(range(1, 2)))
+-
+-            elif self.soft_mask:
+-                all_masks = []
+-                if self.object_name is not None or not self.multi_object:
+-                    # pick one of many objects, soft mask
+-                    # or, single object, soft mask
+-                    mask_path = path.join(self.mask_dir, frame[:-4] + '.png')
+-                    mask = Image.open(mask_path)
+-                    mask = self.mask_transform(mask)
+-                    mask = torch.FloatTensor(np.array(mask)) / 255
+-                    all_masks.append(mask)
+-                    if self.object_name is not None:
+-                        info['object_name'] = self.object_name
+-                elif self.multi_object:
+-                    # use all objects, soft mask
+-                    for prob_folder in self.prob_folders:
+-                        mask_path = path.join(self.mask_dir, prob_folder, frame[:-4] + '.png')
+-                        assert path.exists(mask_path)
+-
+-                        mask = Image.open(mask_path)
+-                        mask = self.mask_transform(mask)
+-                        mask = torch.FloatTensor(np.array(mask)) / 255
+-                        all_masks.append(mask)
+-                all_masks = torch.stack(all_masks, dim=0)
+-                valid_labels = torch.LongTensor(list(range(1, len(all_masks) + 1)))
+-            else:
+-                mask_path = path.join(self.mask_dir, frame[:-4] + '.png')
+-                if path.exists(mask_path):
+-                    mask = Image.open(mask_path).convert('P')
+-                    mask = self.mask_transform(mask)
+-                    mask = torch.LongTensor(np.array(mask))
+-                    valid_labels = torch.unique(mask)
+-                    valid_labels = valid_labels[valid_labels != 0]
+-                    all_masks = mask
+-                else:
+-                    all_masks = valid_labels = None
+-
+-            if all_masks is not None:
+-                data['mask'] = all_masks
+-                data['valid_labels'] = valid_labels
+-
+-        info['shape'] = shape
+-        info['need_resize'] = not (self.size < 0)
+-        info['time_index'] = self._all_frames.index(frame)
+-        info['path_to_image'] = im_path
+-        data['rgb'] = img
+-        data['info'] = info
+-
+-        return data
+-
+-    def get_palette(self):
+-        return self.palette
+-
+-    def __len__(self):
+-        return len(self.frames)
+\ No newline at end of file
+diff --git a/Tracking-Anything-with-DEVA/deva/inference/data/vos_test_datasets.py b/Tracking-Anything-with-DEVA/deva/inference/data/vos_test_datasets.py
+deleted file mode 100644
+index 47b5008..0000000
+--- a/Tracking-Anything-with-DEVA/deva/inference/data/vos_test_datasets.py
++++ /dev/null
+@@ -1,97 +0,0 @@
+-import os
+-from os import path
+-import json
+-
+-from deva.inference.data.video_reader import VideoReader
+-
+-
+-class GeneralVOSTestDataset:
+-    def __init__(self, data_root, size=-1, use_all_masks=False):
+-        self.image_dir = path.join(data_root, 'JPEGImages')
+-        self.mask_dir = path.join(data_root, 'Annotations')
+-        self.size = size
+-        self.use_all_masks = use_all_masks
+-
+-        self.vid_list = sorted(os.listdir(self.mask_dir))
+-
+-    def get_datasets(self):
+-        for video in self.vid_list:
+-            yield VideoReader(
+-                video,
+-                path.join(self.image_dir, video),
+-                path.join(self.mask_dir, video),
+-                to_save=[name[:-4] for name in os.listdir(path.join(self.mask_dir, video))],
+-                size=self.size,
+-                use_all_masks=self.use_all_masks,
+-            )
+-
+-    def __len__(self):
+-        return len(self.vid_list)
+-
+-
+-class DAVISTestDataset:
+-    def __init__(self, data_root, imset='2017/val.txt', size=-1):
+-        if size != 480:
+-            self.image_dir = path.join(data_root, 'JPEGImages', 'Full-Resolution')
+-            self.mask_dir = path.join(data_root, 'Annotations', 'Full-Resolution')
+-            if not path.exists(self.image_dir):
+-                print(f'{self.image_dir} not found. Looking at .../1080p instead')
+-                self.image_dir = path.join(data_root, 'JPEGImages', '1080p')
+-                self.mask_dir = path.join(data_root, 'Annotations', '1080p')
+-            assert path.exists(self.image_dir), 'path not found'
+-        else:
+-            self.image_dir = path.join(data_root, 'JPEGImages', '480p')
+-            self.mask_dir = path.join(data_root, 'Annotations', '480p')
+-        self.size_dir = path.join(data_root, 'JPEGImages', '480p')
+-        self.size = size
+-
+-        with open(path.join(data_root, 'ImageSets', imset)) as f:
+-            self.vid_list = sorted([line.strip() for line in f])
+-
+-    def get_datasets(self):
+-        for video in self.vid_list:
+-            yield VideoReader(
+-                video,
+-                path.join(self.image_dir, video),
+-                path.join(self.mask_dir, video),
+-                size=self.size,
+-                size_dir=path.join(self.size_dir, video),
+-            )
+-
+-    def __len__(self):
+-        return len(self.vid_list)
+-
+-
+-class YouTubeVOSTestDataset:
+-    def __init__(self, data_root, split, size=480):
+-        self.image_dir = path.join(data_root, 'all_frames', split + '_all_frames', 'JPEGImages')
+-        self.mask_dir = path.join(data_root, split, 'Annotations')
+-        self.size = size
+-
+-        self.vid_list = sorted(os.listdir(self.image_dir))
+-        self.req_frame_list = {}
+-
+-        with open(path.join(data_root, split, 'meta.json')) as f:
+-            # read meta.json to know which frame is required for evaluation
+-            meta = json.load(f)['videos']
+-
+-            for vid in self.vid_list:
+-                req_frames = []
+-                objects = meta[vid]['objects']
+-                for value in objects.values():
+-                    req_frames.extend(value['frames'])
+-
+-                req_frames = list(set(req_frames))
+-                self.req_frame_list[vid] = req_frames
+-
+-    def get_datasets(self):
+-        for video in self.vid_list:
+-            yield VideoReader(video,
+-                              path.join(self.image_dir, video),
+-                              path.join(self.mask_dir, video),
+-                              size=self.size,
+-                              to_save=self.req_frame_list[video],
+-                              use_all_masks=True)
+-
+-    def __len__(self):
+-        return len(self.vid_list)
+diff --git a/Tracking-Anything-with-DEVA/deva/inference/data/vps_test_datasets.py b/Tracking-Anything-with-DEVA/deva/inference/data/vps_test_datasets.py
+deleted file mode 100644
+index 624908a..0000000
+--- a/Tracking-Anything-with-DEVA/deva/inference/data/vps_test_datasets.py
++++ /dev/null
+@@ -1,85 +0,0 @@
+-import os
+-from os import path
+-import json
+-
+-from deva.inference.data.detection_video_reader import DetectionVideoReader
+-
+-
+-class VIPSegDetectionTestDataset:
+-    def __init__(self, image_dir, mask_dir, size=-1):
+-        self.image_dir = image_dir
+-        self.mask_dir = mask_dir
+-        self.size = size
+-        self.vid_list = sorted(os.listdir(self.mask_dir))
+-        self.vid_list = [v for v in self.vid_list if not v.endswith('.json')]
+-
+-    def get_datasets(self):
+-        for video in self.vid_list:
+-            yield DetectionVideoReader(
+-                video,
+-                path.join(self.image_dir, video),
+-                path.join(self.mask_dir, video),
+-                to_save=[name[:-4] for name in os.listdir(path.join(self.mask_dir, video))],
+-                size=self.size,
+-            )
+-
+-    def __len__(self):
+-        return len(self.vid_list)
+-
+-
+-class BURSTDetectionTestDataset:
+-    def __init__(self, image_dir, mask_dir, gt_json_dir, size=-1, *, start=None, count=None):
+-        self.image_dir = image_dir
+-        self.mask_dir = mask_dir
+-        self.size = size
+-
+-        # read the json file to get a list of videos and frames to save
+-        with open(gt_json_dir, 'r') as f:
+-            json_file = json.load(f)
+-            sequences = json_file['sequences']
+-            split = json_file['split']
+-
+-        assert split == 'test' or split == 'val'
+-
+-        # load a randomized ordering of BURST videos for a balanced load
+-        with open(f'./deva/utils/burst_{split}.txt', mode='r') as f:
+-            randomized_videos = list(f.read().splitlines())
+-
+-        # subsample a list of videos for processing
+-        if start is not None and count is not None:
+-            randomized_videos = randomized_videos[start:start + count]
+-            print(f'Start: {start}, Count: {count}, End: {start+count}')
+-
+-        self.vid_list = []
+-        self.frames_to_save = {}
+-        for sequence in sequences:
+-            dataset = sequence['dataset']
+-            seq_name = sequence['seq_name']
+-            video_name = path.join(dataset, seq_name)
+-            if video_name not in randomized_videos:
+-                continue
+-            self.vid_list.append(video_name)
+-
+-            annotated_image_paths = sequence['annotated_image_paths']
+-            self.frames_to_save[video_name] = [p[:-4] for p in annotated_image_paths]
+-            assert path.exists(path.join(image_dir, video_name))
+-            assert path.exists(path.join(mask_dir, video_name))
+-
+-        assert len(self.vid_list) == len(randomized_videos)
+-        # to use the random ordering
+-        self.vid_list = randomized_videos
+-
+-        print(f'Actual total: {len(self.vid_list)}')
+-
+-    def get_datasets(self):
+-        for video in self.vid_list:
+-            yield DetectionVideoReader(
+-                video,
+-                path.join(self.image_dir, video),
+-                path.join(self.mask_dir, video),
+-                to_save=self.frames_to_save[video],
+-                size=self.size,
+-            )
+-
+-    def __len__(self):
+-        return len(self.vid_list)
+\ No newline at end of file
+diff --git a/arguments/__init__.py b/arguments/__init__.py
+index 6fcf404..0928d27 100644
+--- a/arguments/__init__.py
++++ b/arguments/__init__.py
+@@ -51,7 +51,7 @@ class ModelParams(ParamGroup):
+         self._white_background = False
+         self.data_device = "cuda"
+         self.eval = False
+-        self.n_views = 100 
++        self.n_views = 5 
+         self.random_init = False
+         self.train_split = False
+         self._object_path = "object_mask"
+diff --git a/count_ply_points.py b/count_ply_points.py
+deleted file mode 100644
+index 9428316..0000000
+--- a/count_ply_points.py
++++ /dev/null
+@@ -1,12 +0,0 @@
+-#!/usr/bin/env python3
+-
+-import sys
+-import open3d as o3d
+-
+-if __name__ == "__main__":
+-    if len(sys.argv) != 2:
+-         print("Usage: python count_ply_points.py <path_to_ply_file>")
+-         sys.exit(1)
+-    ply_path = sys.argv[1]
+-    pcd = o3d.io.read_point_cloud(ply_path)
+-    print("PLY file has", len(pcd.points), "points.") 
+\ No newline at end of file
+diff --git a/export_gaussian.py b/export_gaussian.py
+index 832d614..05448dc 100644
+--- a/export_gaussian.py
++++ b/export_gaussian.py
+@@ -55,9 +55,10 @@ def export_gaussians_to_ply(gaussians, output_ply):
+     o3d.io.write_point_cloud(output_ply, pcd)
+     print(f"Exported {xyz.shape[0]} Gaussians as points to {output_ply}")
+ 
+-def export_gaussian_ellipsoids_to_mesh(gaussians, output_mesh, max_ellipsoids=50000):
++def export_gaussian_ellipsoids_to_mesh(gaussians, output_mesh, max_ellipsoids=10000, scale_factor = 1.0):
+     xyz = gaussians.get_xyz.detach().cpu().numpy()
+     scales = gaussians.get_scaling.detach().cpu().numpy()
++    scales = scales * scale_factor # for different sized Gaussians in output
+     # Use DC color if available, else gray
+     try:
+         colors = gaussians._features_dc.detach().cpu().numpy()  # shape [N, 1, 3]
+@@ -125,41 +126,29 @@ def export_ply_to_ply(input_ply, output_ply):
+     print(f"Copied point cloud from {input_ply} to {output_ply}")
+ 
+ if __name__ == "__main__":
+-    # Define scenes to process
+-    scenes = ["ramen", "figurines", "teatime"]
+-    base_dir = "/home/neural_fields/Unified-Lift-Gabor/output/unifed_lift"
+-    
+-    for scene in scenes:
+-        chkpnt_folder = os.path.join(base_dir, scene, "chkpnts")
+-        output_folder = os.path.join(base_dir, scene, "gaussians")
+-        os.makedirs(output_folder, exist_ok=True)
+-        
+-        print(f"\n{'='*80}")
+-        print(f"Processing scene: {scene}")
+-        print(f"{'='*80}")
+-        
+-        chkpnt_files = sorted(glob.glob(os.path.join(chkpnt_folder, "*.pth")))
+-        
+-        if len(chkpnt_files) == 0:
+-            print(f"No .pth files found in {chkpnt_folder}")
+-            continue
+-            
+-        print(f"Found {len(chkpnt_files)} checkpoint files")
+-        
++    chkpnt_folder = "/home/neural_fields/Unified-Lift-Daniel/output/unified_lift/scannetscene/chkpnts"
++    output_folder = "/home/neural_fields/Unified-Lift-Daniel/output/unified_lift/scannetscene/gaussians"
++    os.makedirs(output_folder, exist_ok=True)
++
++    chkpnt_files = sorted(glob.glob(os.path.join(chkpnt_folder, "*.pth")))
++
++    if len(chkpnt_files) == 0:
++        print(f"No .pth files found in {chkpnt_folder}")
++    else:
++        scale_factors = [0.1, 0.25, 1.0]
+         for input_path in chkpnt_files:
+             base_name = os.path.splitext(os.path.basename(input_path))[0]
++            points_ply = os.path.join(output_folder, f"out_{base_name}_points.ply")
++            ellipsoids_ply = os.path.join(output_folder, f"out_{base_name}_ellipsoids.ply")
++            print(f"Processing {input_path} -> {points_ply}, {ellipsoids_ply}")
++
+             gaussians = load_gaussians_from_checkpoint(input_path)
+-            xyz = gaussians.get_xyz.detach().cpu().numpy()
+-            num_points = xyz.shape[0]
+-            points_ply = os.path.join(output_folder, f"{scene}_{base_name}_{num_points}_pts.ply")
+-            ellipsoids_ply = os.path.join(output_folder, f"{scene}_{base_name}_{num_points}_ellipsoids.ply")
+-            print(f"\nProcessing {os.path.basename(input_path)}")
+-            print(f"Output files:")
+-            print(f"  Points: {points_ply}")
+-            print(f"  Ellipsoids: {ellipsoids_ply}")
+-            try:
+-                export_gaussians_to_ply(gaussians, points_ply)
+-                export_gaussian_ellipsoids_to_mesh(gaussians, ellipsoids_ply)
+-            except Exception as e:
+-                print(f"Error processing {input_path}: {e}")
+-                continue
+\ No newline at end of file
++            export_gaussians_to_ply(gaussians, points_ply)
++            for factor in scale_factors:
++                suffix = f"{int(factor * 100)}"
++                ellipsoids_ply = os.path.join(output_folder, f"out_{base_name}_ellipsoids_{suffix}.ply")
++                export_gaussian_ellipsoids_to_mesh(
++                    gaussians,
++                    ellipsoids_ply,
++                    scale_factor=factor
++                ) 
+\ No newline at end of file
+diff --git a/geometry_train.py b/geometry_train.py
+new file mode 100644
+index 0000000..1cb9635
+--- /dev/null
++++ b/geometry_train.py
+@@ -0,0 +1,121 @@
++# geometry_train.py
++# This version of the training script focuses only on geometric reconstruction using RGB images and COLMAP poses.
++
++import os
++import torch
++import numpy as np
++from random import randint
++from gaussian_renderer import render, network_gui
++from scene import Scene, GaussianModel
++from utils.loss_utils import l1_loss, ssim
++from utils.general_utils import safe_state
++from PIL import Image
++from argparse import ArgumentParser, Namespace
++from arguments import ModelParams, PipelineParams, OptimizationParams
++import json
++import uuid
++from tqdm import tqdm
++
++def prepare_output_and_logger(args):
++    if not args.model_path:
++        unique_str = os.getenv('OAR_JOB_ID', str(uuid.uuid4()))
++        args.model_path = os.path.join("./output/", unique_str[0:10])
++
++    print("Output folder:", args.model_path)
++    os.makedirs(args.model_path, exist_ok=True)
++
++    args.ckpt_dir = os.path.join(args.model_path, "chkpnts")
++    os.makedirs(args.ckpt_dir, exist_ok=True)
++
++    with open(os.path.join(args.model_path, "cfg_args"), 'w') as f:
++        f.write(str(Namespace(**vars(args))))
++
++def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, use_wandb):
++    first_iter = 0
++    prepare_output_and_logger(dataset)
++    gaussians = GaussianModel(dataset.sh_degree)
++    scene = Scene(dataset, gaussians)
++    gaussians.training_setup(opt)
++
++    if checkpoint:
++        model_params, first_iter = torch.load(checkpoint)
++        gaussians.restore(model_params, opt)
++
++    bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
++    background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
++
++    progress_bar = tqdm(range(first_iter + 1, opt.iterations + 1), desc="Training progress")
++    ema_loss = 0.0
++
++    for iteration in range(first_iter + 1, opt.iterations + 1):
++        gaussians.update_learning_rate(iteration)
++
++        if iteration % 1000 == 0:
++            gaussians.oneupSHdegree()
++
++        viewpoint_stack = scene.getTrainCameras().copy()
++        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack) - 1))
++
++        render_pkg = render(viewpoint_cam, gaussians, pipe, background)
++        image = render_pkg["render"]
++
++        gt_image = viewpoint_cam.original_image.to("cuda")
++        loss = (1.0 - opt.lambda_dssim) * l1_loss(image, gt_image) + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
++
++        loss.backward()
++        ema_loss = 0.4 * loss.item() + 0.6 * ema_loss
++
++        if iteration % 10 == 0:
++            progress_bar.set_postfix({"Loss": f"{ema_loss:.6f}"})
++            progress_bar.update(10)
++
++        if iteration in saving_iterations:
++            print(f"\n[ITER {iteration}] Saving Gaussians")
++            scene.save(iteration)
++
++        if iteration in checkpoint_iterations:
++            print(f"\n[ITER {iteration}] Saving Checkpoint")
++            torch.save((gaussians.capture(), iteration), os.path.join(dataset.ckpt_dir, f"chkpnt{iteration}.pth"))
++
++        if iteration == opt.iterations:
++            print(f"\n[ITER {iteration}] Saving Final Checkpoint")
++            torch.save((gaussians.capture(), iteration), os.path.join(dataset.ckpt_dir, f"chkpnt{iteration}.pth"))
++
++        if iteration < opt.iterations:
++            gaussians.optimizer.step()
++            gaussians.optimizer.zero_grad(set_to_none=True)
++
++    progress_bar.close()
++    print("\nTraining complete.")
++
++if __name__ == "__main__":
++    parser = ArgumentParser(description="Unified-Lift Geometry-Only Training")
++    lp = ModelParams(parser)
++    op = OptimizationParams(parser)
++    pp = PipelineParams(parser)
++
++    parser.add_argument('--ip', type=str, default="127.0.0.1")
++    parser.add_argument('--port', type=int, default=6009)
++    parser.add_argument('--debug_from', type=int, default=-1)
++    parser.add_argument('--detect_anomaly', action='store_true', default=False)
++    parser.add_argument("--test_iterations", nargs="+", type=int, default=[1000, 7000, 30000])
++    parser.add_argument("--save_iterations", nargs="+", type=int, default=[1000, 7000, 20000, 30000])
++    parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[7000])
++    parser.add_argument("--start_checkpoint", type=str, default=None)
++    parser.add_argument("--config_file", type=str, required=True, help="Path to config JSON")
++    parser.add_argument("--use_wandb", action='store_true')
++    parser.add_argument("--quiet", action="store_true", help="Suppress output if set")
++
++    args = parser.parse_args()
++
++    # Load JSON config
++    with open(args.config_file, 'r') as f:
++        config = json.load(f)
++        for k, v in config.items():
++            setattr(args, k, v)
++
++    safe_state(args.quiet)
++    network_gui.init(args.ip, args.port)
++    torch.autograd.set_detect_anomaly(args.detect_anomaly)
++
++    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from, args.use_wandb)
+diff --git a/lama/saicinpainting/training/data/__init__.py b/lama/saicinpainting/training/data/__init__.py
+deleted file mode 100644
+index e69de29..0000000
+diff --git a/lama/saicinpainting/training/data/aug.py b/lama/saicinpainting/training/data/aug.py
+deleted file mode 100644
+index b124625..0000000
+--- a/lama/saicinpainting/training/data/aug.py
++++ /dev/null
+@@ -1,84 +0,0 @@
+-from albumentations import DualIAATransform, to_tuple
+-import imgaug.augmenters as iaa
+-
+-class IAAAffine2(DualIAATransform):
+-    """Place a regular grid of points on the input and randomly move the neighbourhood of these point around
+-    via affine transformations.
+-
+-    Note: This class introduce interpolation artifacts to mask if it has values other than {0;1}
+-
+-    Args:
+-        p (float): probability of applying the transform. Default: 0.5.
+-
+-    Targets:
+-        image, mask
+-    """
+-
+-    def __init__(
+-        self,
+-        scale=(0.7, 1.3),
+-        translate_percent=None,
+-        translate_px=None,
+-        rotate=0.0,
+-        shear=(-0.1, 0.1),
+-        order=1,
+-        cval=0,
+-        mode="reflect",
+-        always_apply=False,
+-        p=0.5,
+-    ):
+-        super(IAAAffine2, self).__init__(always_apply, p)
+-        self.scale = dict(x=scale, y=scale)
+-        self.translate_percent = to_tuple(translate_percent, 0)
+-        self.translate_px = to_tuple(translate_px, 0)
+-        self.rotate = to_tuple(rotate)
+-        self.shear = dict(x=shear, y=shear)
+-        self.order = order
+-        self.cval = cval
+-        self.mode = mode
+-
+-    @property
+-    def processor(self):
+-        return iaa.Affine(
+-            self.scale,
+-            self.translate_percent,
+-            self.translate_px,
+-            self.rotate,
+-            self.shear,
+-            self.order,
+-            self.cval,
+-            self.mode,
+-        )
+-
+-    def get_transform_init_args_names(self):
+-        return ("scale", "translate_percent", "translate_px", "rotate", "shear", "order", "cval", "mode")
+-
+-
+-class IAAPerspective2(DualIAATransform):
+-    """Perform a random four point perspective transform of the input.
+-
+-    Note: This class introduce interpolation artifacts to mask if it has values other than {0;1}
+-
+-    Args:
+-        scale ((float, float): standard deviation of the normal distributions. These are used to sample
+-            the random distances of the subimage's corners from the full image's corners. Default: (0.05, 0.1).
+-        p (float): probability of applying the transform. Default: 0.5.
+-
+-    Targets:
+-        image, mask
+-    """
+-
+-    def __init__(self, scale=(0.05, 0.1), keep_size=True, always_apply=False, p=0.5,
+-                 order=1, cval=0, mode="replicate"):
+-        super(IAAPerspective2, self).__init__(always_apply, p)
+-        self.scale = to_tuple(scale, 1.0)
+-        self.keep_size = keep_size
+-        self.cval = cval
+-        self.mode = mode
+-
+-    @property
+-    def processor(self):
+-        return iaa.PerspectiveTransform(self.scale, keep_size=self.keep_size, mode=self.mode, cval=self.cval)
+-
+-    def get_transform_init_args_names(self):
+-        return ("scale", "keep_size")
+diff --git a/lama/saicinpainting/training/data/datasets.py b/lama/saicinpainting/training/data/datasets.py
+deleted file mode 100644
+index c4f503d..0000000
+--- a/lama/saicinpainting/training/data/datasets.py
++++ /dev/null
+@@ -1,304 +0,0 @@
+-import glob
+-import logging
+-import os
+-import random
+-
+-import albumentations as A
+-import cv2
+-import numpy as np
+-import torch
+-import torch.nn.functional as F
+-import webdataset
+-from omegaconf import open_dict, OmegaConf
+-from skimage.feature import canny
+-from skimage.transform import rescale, resize
+-from torch.utils.data import Dataset, IterableDataset, DataLoader, DistributedSampler, ConcatDataset
+-
+-from saicinpainting.evaluation.data import InpaintingDataset as InpaintingEvaluationDataset, \
+-    OurInpaintingDataset as OurInpaintingEvaluationDataset, ceil_modulo, InpaintingEvalOnlineDataset
+-from saicinpainting.training.data.aug import IAAAffine2, IAAPerspective2
+-from saicinpainting.training.data.masks import get_mask_generator
+-
+-LOGGER = logging.getLogger(__name__)
+-
+-
+-class InpaintingTrainDataset(Dataset):
+-    def __init__(self, indir, mask_generator, transform):
+-        self.in_files = list(glob.glob(os.path.join(indir, '**', '*.jpg'), recursive=True))
+-        self.mask_generator = mask_generator
+-        self.transform = transform
+-        self.iter_i = 0
+-
+-    def __len__(self):
+-        return len(self.in_files)
+-
+-    def __getitem__(self, item):
+-        path = self.in_files[item]
+-        img = cv2.imread(path)
+-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+-        img = self.transform(image=img)['image']
+-        img = np.transpose(img, (2, 0, 1))
+-        # TODO: maybe generate mask before augmentations? slower, but better for segmentation-based masks
+-        mask = self.mask_generator(img, iter_i=self.iter_i)
+-        self.iter_i += 1
+-        return dict(image=img,
+-                    mask=mask)
+-
+-
+-class InpaintingTrainWebDataset(IterableDataset):
+-    def __init__(self, indir, mask_generator, transform, shuffle_buffer=200):
+-        self.impl = webdataset.Dataset(indir).shuffle(shuffle_buffer).decode('rgb').to_tuple('jpg')
+-        self.mask_generator = mask_generator
+-        self.transform = transform
+-
+-    def __iter__(self):
+-        for iter_i, (img,) in enumerate(self.impl):
+-            img = np.clip(img * 255, 0, 255).astype('uint8')
+-            img = self.transform(image=img)['image']
+-            img = np.transpose(img, (2, 0, 1))
+-            mask = self.mask_generator(img, iter_i=iter_i)
+-            yield dict(image=img,
+-                       mask=mask)
+-
+-
+-class ImgSegmentationDataset(Dataset):
+-    def __init__(self, indir, mask_generator, transform, out_size, segm_indir, semantic_seg_n_classes):
+-        self.indir = indir
+-        self.segm_indir = segm_indir
+-        self.mask_generator = mask_generator
+-        self.transform = transform
+-        self.out_size = out_size
+-        self.semantic_seg_n_classes = semantic_seg_n_classes
+-        self.in_files = list(glob.glob(os.path.join(indir, '**', '*.jpg'), recursive=True))
+-
+-    def __len__(self):
+-        return len(self.in_files)
+-
+-    def __getitem__(self, item):
+-        path = self.in_files[item]
+-        img = cv2.imread(path)
+-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+-        img = cv2.resize(img, (self.out_size, self.out_size))
+-        img = self.transform(image=img)['image']
+-        img = np.transpose(img, (2, 0, 1))
+-        mask = self.mask_generator(img)
+-        segm, segm_classes= self.load_semantic_segm(path)
+-        result = dict(image=img,
+-                      mask=mask,
+-                      segm=segm,
+-                      segm_classes=segm_classes)
+-        return result
+-
+-    def load_semantic_segm(self, img_path):
+-        segm_path = img_path.replace(self.indir, self.segm_indir).replace(".jpg", ".png")
+-        mask = cv2.imread(segm_path, cv2.IMREAD_GRAYSCALE)
+-        mask = cv2.resize(mask, (self.out_size, self.out_size))
+-        tensor = torch.from_numpy(np.clip(mask.astype(int)-1, 0, None))
+-        ohe = F.one_hot(tensor.long(), num_classes=self.semantic_seg_n_classes) # w x h x n_classes
+-        return ohe.permute(2, 0, 1).float(), tensor.unsqueeze(0)
+-
+-
+-def get_transforms(transform_variant, out_size):
+-    if transform_variant == 'default':
+-        transform = A.Compose([
+-            A.RandomScale(scale_limit=0.2),  # +/- 20%
+-            A.PadIfNeeded(min_height=out_size, min_width=out_size),
+-            A.RandomCrop(height=out_size, width=out_size),
+-            A.HorizontalFlip(),
+-            A.CLAHE(),
+-            A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2),
+-            A.HueSaturationValue(hue_shift_limit=5, sat_shift_limit=30, val_shift_limit=5),
+-            A.ToFloat()
+-        ])
+-    elif transform_variant == 'distortions':
+-        transform = A.Compose([
+-            IAAPerspective2(scale=(0.0, 0.06)),
+-            IAAAffine2(scale=(0.7, 1.3),
+-                       rotate=(-40, 40),
+-                       shear=(-0.1, 0.1)),
+-            A.PadIfNeeded(min_height=out_size, min_width=out_size),
+-            A.OpticalDistortion(),
+-            A.RandomCrop(height=out_size, width=out_size),
+-            A.HorizontalFlip(),
+-            A.CLAHE(),
+-            A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2),
+-            A.HueSaturationValue(hue_shift_limit=5, sat_shift_limit=30, val_shift_limit=5),
+-            A.ToFloat()
+-        ])
+-    elif transform_variant == 'distortions_scale05_1':
+-        transform = A.Compose([
+-            IAAPerspective2(scale=(0.0, 0.06)),
+-            IAAAffine2(scale=(0.5, 1.0),
+-                       rotate=(-40, 40),
+-                       shear=(-0.1, 0.1),
+-                       p=1),
+-            A.PadIfNeeded(min_height=out_size, min_width=out_size),
+-            A.OpticalDistortion(),
+-            A.RandomCrop(height=out_size, width=out_size),
+-            A.HorizontalFlip(),
+-            A.CLAHE(),
+-            A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2),
+-            A.HueSaturationValue(hue_shift_limit=5, sat_shift_limit=30, val_shift_limit=5),
+-            A.ToFloat()
+-        ])
+-    elif transform_variant == 'distortions_scale03_12':
+-        transform = A.Compose([
+-            IAAPerspective2(scale=(0.0, 0.06)),
+-            IAAAffine2(scale=(0.3, 1.2),
+-                       rotate=(-40, 40),
+-                       shear=(-0.1, 0.1),
+-                       p=1),
+-            A.PadIfNeeded(min_height=out_size, min_width=out_size),
+-            A.OpticalDistortion(),
+-            A.RandomCrop(height=out_size, width=out_size),
+-            A.HorizontalFlip(),
+-            A.CLAHE(),
+-            A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2),
+-            A.HueSaturationValue(hue_shift_limit=5, sat_shift_limit=30, val_shift_limit=5),
+-            A.ToFloat()
+-        ])
+-    elif transform_variant == 'distortions_scale03_07':
+-        transform = A.Compose([
+-            IAAPerspective2(scale=(0.0, 0.06)),
+-            IAAAffine2(scale=(0.3, 0.7),  # scale 512 to 256 in average
+-                       rotate=(-40, 40),
+-                       shear=(-0.1, 0.1),
+-                       p=1),
+-            A.PadIfNeeded(min_height=out_size, min_width=out_size),
+-            A.OpticalDistortion(),
+-            A.RandomCrop(height=out_size, width=out_size),
+-            A.HorizontalFlip(),
+-            A.CLAHE(),
+-            A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2),
+-            A.HueSaturationValue(hue_shift_limit=5, sat_shift_limit=30, val_shift_limit=5),
+-            A.ToFloat()
+-        ])
+-    elif transform_variant == 'distortions_light':
+-        transform = A.Compose([
+-            IAAPerspective2(scale=(0.0, 0.02)),
+-            IAAAffine2(scale=(0.8, 1.8),
+-                       rotate=(-20, 20),
+-                       shear=(-0.03, 0.03)),
+-            A.PadIfNeeded(min_height=out_size, min_width=out_size),
+-            A.RandomCrop(height=out_size, width=out_size),
+-            A.HorizontalFlip(),
+-            A.CLAHE(),
+-            A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2),
+-            A.HueSaturationValue(hue_shift_limit=5, sat_shift_limit=30, val_shift_limit=5),
+-            A.ToFloat()
+-        ])
+-    elif transform_variant == 'non_space_transform':
+-        transform = A.Compose([
+-            A.CLAHE(),
+-            A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2),
+-            A.HueSaturationValue(hue_shift_limit=5, sat_shift_limit=30, val_shift_limit=5),
+-            A.ToFloat()
+-        ])
+-    elif transform_variant == 'no_augs':
+-        transform = A.Compose([
+-            A.ToFloat()
+-        ])
+-    else:
+-        raise ValueError(f'Unexpected transform_variant {transform_variant}')
+-    return transform
+-
+-
+-def make_default_train_dataloader(indir, kind='default', out_size=512, mask_gen_kwargs=None, transform_variant='default',
+-                                  mask_generator_kind="mixed", dataloader_kwargs=None, ddp_kwargs=None, **kwargs):
+-    LOGGER.info(f'Make train dataloader {kind} from {indir}. Using mask generator={mask_generator_kind}')
+-
+-    mask_generator = get_mask_generator(kind=mask_generator_kind, kwargs=mask_gen_kwargs)
+-    transform = get_transforms(transform_variant, out_size)
+-
+-    if kind == 'default':
+-        dataset = InpaintingTrainDataset(indir=indir,
+-                                         mask_generator=mask_generator,
+-                                         transform=transform,
+-                                         **kwargs)
+-    elif kind == 'default_web':
+-        dataset = InpaintingTrainWebDataset(indir=indir,
+-                                            mask_generator=mask_generator,
+-                                            transform=transform,
+-                                            **kwargs)
+-    elif kind == 'img_with_segm':
+-        dataset = ImgSegmentationDataset(indir=indir,
+-                                         mask_generator=mask_generator,
+-                                         transform=transform,
+-                                         out_size=out_size,
+-                                         **kwargs)
+-    else:
+-        raise ValueError(f'Unknown train dataset kind {kind}')
+-
+-    if dataloader_kwargs is None:
+-        dataloader_kwargs = {}
+-
+-    is_dataset_only_iterable = kind in ('default_web',)
+-
+-    if ddp_kwargs is not None and not is_dataset_only_iterable:
+-        dataloader_kwargs['shuffle'] = False
+-        dataloader_kwargs['sampler'] = DistributedSampler(dataset, **ddp_kwargs)
+-
+-    if is_dataset_only_iterable and 'shuffle' in dataloader_kwargs:
+-        with open_dict(dataloader_kwargs):
+-            del dataloader_kwargs['shuffle']
+-
+-    dataloader = DataLoader(dataset, **dataloader_kwargs)
+-    return dataloader
+-
+-
+-def make_default_val_dataset(indir, kind='default', out_size=512, transform_variant='default', **kwargs):
+-    if OmegaConf.is_list(indir) or isinstance(indir, (tuple, list)):
+-        return ConcatDataset([
+-            make_default_val_dataset(idir, kind=kind, out_size=out_size, transform_variant=transform_variant, **kwargs) for idir in indir 
+-        ])
+-
+-    LOGGER.info(f'Make val dataloader {kind} from {indir}')
+-    mask_generator = get_mask_generator(kind=kwargs.get("mask_generator_kind"), kwargs=kwargs.get("mask_gen_kwargs"))
+-
+-    if transform_variant is not None:
+-        transform = get_transforms(transform_variant, out_size)
+-
+-    if kind == 'default':
+-        dataset = InpaintingEvaluationDataset(indir, **kwargs)
+-    elif kind == 'our_eval':
+-        dataset = OurInpaintingEvaluationDataset(indir, **kwargs)
+-    elif kind == 'img_with_segm':
+-        dataset = ImgSegmentationDataset(indir=indir,
+-                                         mask_generator=mask_generator,
+-                                         transform=transform,
+-                                         out_size=out_size,
+-                                         **kwargs)
+-    elif kind == 'online':
+-        dataset = InpaintingEvalOnlineDataset(indir=indir,
+-                                              mask_generator=mask_generator,
+-                                              transform=transform,
+-                                              out_size=out_size,
+-                                              **kwargs)
+-    else:
+-        raise ValueError(f'Unknown val dataset kind {kind}')
+-
+-    return dataset
+-
+-
+-def make_default_val_dataloader(*args, dataloader_kwargs=None, **kwargs):
+-    dataset = make_default_val_dataset(*args, **kwargs)
+-
+-    if dataloader_kwargs is None:
+-        dataloader_kwargs = {}
+-    dataloader = DataLoader(dataset, **dataloader_kwargs)
+-    return dataloader
+-
+-
+-def make_constant_area_crop_params(img_height, img_width, min_size=128, max_size=512, area=256*256, round_to_mod=16):
+-    min_size = min(img_height, img_width, min_size)
+-    max_size = min(img_height, img_width, max_size)
+-    if random.random() < 0.5:
+-        out_height = min(max_size, ceil_modulo(random.randint(min_size, max_size), round_to_mod))
+-        out_width = min(max_size, ceil_modulo(area // out_height, round_to_mod))
+-    else:
+-        out_width = min(max_size, ceil_modulo(random.randint(min_size, max_size), round_to_mod))
+-        out_height = min(max_size, ceil_modulo(area // out_width, round_to_mod))
+-
+-    start_y = random.randint(0, img_height - out_height)
+-    start_x = random.randint(0, img_width - out_width)
+-    return (start_y, start_x, out_height, out_width)
+diff --git a/lama/saicinpainting/training/data/masks.py b/lama/saicinpainting/training/data/masks.py
+deleted file mode 100644
+index e91fc74..0000000
+--- a/lama/saicinpainting/training/data/masks.py
++++ /dev/null
+@@ -1,332 +0,0 @@
+-import math
+-import random
+-import hashlib
+-import logging
+-from enum import Enum
+-
+-import cv2
+-import numpy as np
+-
+-from saicinpainting.evaluation.masks.mask import SegmentationMask
+-from saicinpainting.utils import LinearRamp
+-
+-LOGGER = logging.getLogger(__name__)
+-
+-
+-class DrawMethod(Enum):
+-    LINE = 'line'
+-    CIRCLE = 'circle'
+-    SQUARE = 'square'
+-
+-
+-def make_random_irregular_mask(shape, max_angle=4, max_len=60, max_width=20, min_times=0, max_times=10,
+-                               draw_method=DrawMethod.LINE):
+-    draw_method = DrawMethod(draw_method)
+-
+-    height, width = shape
+-    mask = np.zeros((height, width), np.float32)
+-    times = np.random.randint(min_times, max_times + 1)
+-    for i in range(times):
+-        start_x = np.random.randint(width)
+-        start_y = np.random.randint(height)
+-        for j in range(1 + np.random.randint(5)):
+-            angle = 0.01 + np.random.randint(max_angle)
+-            if i % 2 == 0:
+-                angle = 2 * 3.1415926 - angle
+-            length = 10 + np.random.randint(max_len)
+-            brush_w = 5 + np.random.randint(max_width)
+-            end_x = np.clip((start_x + length * np.sin(angle)).astype(np.int32), 0, width)
+-            end_y = np.clip((start_y + length * np.cos(angle)).astype(np.int32), 0, height)
+-            if draw_method == DrawMethod.LINE:
+-                cv2.line(mask, (start_x, start_y), (end_x, end_y), 1.0, brush_w)
+-            elif draw_method == DrawMethod.CIRCLE:
+-                cv2.circle(mask, (start_x, start_y), radius=brush_w, color=1., thickness=-1)
+-            elif draw_method == DrawMethod.SQUARE:
+-                radius = brush_w // 2
+-                mask[start_y - radius:start_y + radius, start_x - radius:start_x + radius] = 1
+-            start_x, start_y = end_x, end_y
+-    return mask[None, ...]
+-
+-
+-class RandomIrregularMaskGenerator:
+-    def __init__(self, max_angle=4, max_len=60, max_width=20, min_times=0, max_times=10, ramp_kwargs=None,
+-                 draw_method=DrawMethod.LINE):
+-        self.max_angle = max_angle
+-        self.max_len = max_len
+-        self.max_width = max_width
+-        self.min_times = min_times
+-        self.max_times = max_times
+-        self.draw_method = draw_method
+-        self.ramp = LinearRamp(**ramp_kwargs) if ramp_kwargs is not None else None
+-
+-    def __call__(self, img, iter_i=None, raw_image=None):
+-        coef = self.ramp(iter_i) if (self.ramp is not None) and (iter_i is not None) else 1
+-        cur_max_len = int(max(1, self.max_len * coef))
+-        cur_max_width = int(max(1, self.max_width * coef))
+-        cur_max_times = int(self.min_times + 1 + (self.max_times - self.min_times) * coef)
+-        return make_random_irregular_mask(img.shape[1:], max_angle=self.max_angle, max_len=cur_max_len,
+-                                          max_width=cur_max_width, min_times=self.min_times, max_times=cur_max_times,
+-                                          draw_method=self.draw_method)
+-
+-
+-def make_random_rectangle_mask(shape, margin=10, bbox_min_size=30, bbox_max_size=100, min_times=0, max_times=3):
+-    height, width = shape
+-    mask = np.zeros((height, width), np.float32)
+-    bbox_max_size = min(bbox_max_size, height - margin * 2, width - margin * 2)
+-    times = np.random.randint(min_times, max_times + 1)
+-    for i in range(times):
+-        box_width = np.random.randint(bbox_min_size, bbox_max_size)
+-        box_height = np.random.randint(bbox_min_size, bbox_max_size)
+-        start_x = np.random.randint(margin, width - margin - box_width + 1)
+-        start_y = np.random.randint(margin, height - margin - box_height + 1)
+-        mask[start_y:start_y + box_height, start_x:start_x + box_width] = 1
+-    return mask[None, ...]
+-
+-
+-class RandomRectangleMaskGenerator:
+-    def __init__(self, margin=10, bbox_min_size=30, bbox_max_size=100, min_times=0, max_times=3, ramp_kwargs=None):
+-        self.margin = margin
+-        self.bbox_min_size = bbox_min_size
+-        self.bbox_max_size = bbox_max_size
+-        self.min_times = min_times
+-        self.max_times = max_times
+-        self.ramp = LinearRamp(**ramp_kwargs) if ramp_kwargs is not None else None
+-
+-    def __call__(self, img, iter_i=None, raw_image=None):
+-        coef = self.ramp(iter_i) if (self.ramp is not None) and (iter_i is not None) else 1
+-        cur_bbox_max_size = int(self.bbox_min_size + 1 + (self.bbox_max_size - self.bbox_min_size) * coef)
+-        cur_max_times = int(self.min_times + (self.max_times - self.min_times) * coef)
+-        return make_random_rectangle_mask(img.shape[1:], margin=self.margin, bbox_min_size=self.bbox_min_size,
+-                                          bbox_max_size=cur_bbox_max_size, min_times=self.min_times,
+-                                          max_times=cur_max_times)
+-
+-
+-class RandomSegmentationMaskGenerator:
+-    def __init__(self, **kwargs):
+-        self.impl = None  # will be instantiated in first call (effectively in subprocess)
+-        self.kwargs = kwargs
+-
+-    def __call__(self, img, iter_i=None, raw_image=None):
+-        if self.impl is None:
+-            self.impl = SegmentationMask(**self.kwargs)
+-
+-        masks = self.impl.get_masks(np.transpose(img, (1, 2, 0)))
+-        masks = [m for m in masks if len(np.unique(m)) > 1]
+-        return np.random.choice(masks)
+-
+-
+-def make_random_superres_mask(shape, min_step=2, max_step=4, min_width=1, max_width=3):
+-    height, width = shape
+-    mask = np.zeros((height, width), np.float32)
+-    step_x = np.random.randint(min_step, max_step + 1)
+-    width_x = np.random.randint(min_width, min(step_x, max_width + 1))
+-    offset_x = np.random.randint(0, step_x)
+-
+-    step_y = np.random.randint(min_step, max_step + 1)
+-    width_y = np.random.randint(min_width, min(step_y, max_width + 1))
+-    offset_y = np.random.randint(0, step_y)
+-
+-    for dy in range(width_y):
+-        mask[offset_y + dy::step_y] = 1
+-    for dx in range(width_x):
+-        mask[:, offset_x + dx::step_x] = 1
+-    return mask[None, ...]
+-
+-
+-class RandomSuperresMaskGenerator:
+-    def __init__(self, **kwargs):
+-        self.kwargs = kwargs
+-
+-    def __call__(self, img, iter_i=None):
+-        return make_random_superres_mask(img.shape[1:], **self.kwargs)
+-
+-
+-class DumbAreaMaskGenerator:
+-    min_ratio = 0.1
+-    max_ratio = 0.35
+-    default_ratio = 0.225
+-
+-    def __init__(self, is_training):
+-        #Parameters:
+-        #    is_training(bool): If true - random rectangular mask, if false - central square mask
+-        self.is_training = is_training
+-
+-    def _random_vector(self, dimension):
+-        if self.is_training:
+-            lower_limit = math.sqrt(self.min_ratio)
+-            upper_limit = math.sqrt(self.max_ratio)
+-            mask_side = round((random.random() * (upper_limit - lower_limit) + lower_limit) * dimension)
+-            u = random.randint(0, dimension-mask_side-1)
+-            v = u+mask_side 
+-        else:
+-            margin = (math.sqrt(self.default_ratio) / 2) * dimension
+-            u = round(dimension/2 - margin)
+-            v = round(dimension/2 + margin)
+-        return u, v
+-
+-    def __call__(self, img, iter_i=None, raw_image=None):
+-        c, height, width = img.shape
+-        mask = np.zeros((height, width), np.float32)
+-        x1, x2 = self._random_vector(width)
+-        y1, y2 = self._random_vector(height)
+-        mask[x1:x2, y1:y2] = 1
+-        return mask[None, ...]
+-
+-
+-class OutpaintingMaskGenerator:
+-    def __init__(self, min_padding_percent:float=0.04, max_padding_percent:int=0.25, left_padding_prob:float=0.5, top_padding_prob:float=0.5, 
+-                 right_padding_prob:float=0.5, bottom_padding_prob:float=0.5, is_fixed_randomness:bool=False):
+-        """
+-        is_fixed_randomness - get identical paddings for the same image if args are the same
+-        """
+-        self.min_padding_percent = min_padding_percent
+-        self.max_padding_percent = max_padding_percent
+-        self.probs = [left_padding_prob, top_padding_prob, right_padding_prob, bottom_padding_prob]
+-        self.is_fixed_randomness = is_fixed_randomness
+-
+-        assert self.min_padding_percent <= self.max_padding_percent
+-        assert self.max_padding_percent > 0
+-        assert len([x for x in [self.min_padding_percent, self.max_padding_percent] if (x>=0 and x<=1)]) == 2, f"Padding percentage should be in [0,1]"
+-        assert sum(self.probs) > 0, f"At least one of the padding probs should be greater than 0 - {self.probs}"
+-        assert len([x for x in self.probs if (x >= 0) and (x <= 1)]) == 4, f"At least one of padding probs is not in [0,1] - {self.probs}"
+-        if len([x for x in self.probs if x > 0]) == 1:
+-            LOGGER.warning(f"Only one padding prob is greater than zero - {self.probs}. That means that the outpainting masks will be always on the same side")
+-
+-    def apply_padding(self, mask, coord):
+-        mask[int(coord[0][0]*self.img_h):int(coord[1][0]*self.img_h),   
+-             int(coord[0][1]*self.img_w):int(coord[1][1]*self.img_w)] = 1
+-        return mask
+-
+-    def get_padding(self, size):
+-        n1 = int(self.min_padding_percent*size)
+-        n2 = int(self.max_padding_percent*size)
+-        return self.rnd.randint(n1, n2) / size
+-
+-    @staticmethod
+-    def _img2rs(img):
+-        arr = np.ascontiguousarray(img.astype(np.uint8))
+-        str_hash = hashlib.sha1(arr).hexdigest()
+-        res = hash(str_hash)%(2**32)
+-        return res
+-
+-    def __call__(self, img, iter_i=None, raw_image=None):
+-        c, self.img_h, self.img_w = img.shape
+-        mask = np.zeros((self.img_h, self.img_w), np.float32)
+-        at_least_one_mask_applied = False
+-
+-        if self.is_fixed_randomness:
+-            assert raw_image is not None, f"Cant calculate hash on raw_image=None"
+-            rs = self._img2rs(raw_image)
+-            self.rnd = np.random.RandomState(rs)
+-        else:
+-            self.rnd = np.random
+-
+-        coords = [[
+-                   (0,0), 
+-                   (1,self.get_padding(size=self.img_h))
+-                  ],
+-                  [
+-                    (0,0),
+-                    (self.get_padding(size=self.img_w),1)
+-                  ],
+-                  [
+-                    (0,1-self.get_padding(size=self.img_h)),
+-                    (1,1)
+-                  ],    
+-                  [
+-                    (1-self.get_padding(size=self.img_w),0),
+-                    (1,1)
+-                  ]]
+-
+-        for pp, coord in zip(self.probs, coords):
+-            if self.rnd.random() < pp:
+-                at_least_one_mask_applied = True
+-                mask = self.apply_padding(mask=mask, coord=coord)
+-
+-        if not at_least_one_mask_applied:
+-            idx = self.rnd.choice(range(len(coords)), p=np.array(self.probs)/sum(self.probs))
+-            mask = self.apply_padding(mask=mask, coord=coords[idx])
+-        return mask[None, ...]
+-
+-
+-class MixedMaskGenerator:
+-    def __init__(self, irregular_proba=1/3, irregular_kwargs=None,
+-                 box_proba=1/3, box_kwargs=None,
+-                 segm_proba=1/3, segm_kwargs=None,
+-                 squares_proba=0, squares_kwargs=None,
+-                 superres_proba=0, superres_kwargs=None,
+-                 outpainting_proba=0, outpainting_kwargs=None,
+-                 invert_proba=0):
+-        self.probas = []
+-        self.gens = []
+-
+-        if irregular_proba > 0:
+-            self.probas.append(irregular_proba)
+-            if irregular_kwargs is None:
+-                irregular_kwargs = {}
+-            else:
+-                irregular_kwargs = dict(irregular_kwargs)
+-            irregular_kwargs['draw_method'] = DrawMethod.LINE
+-            self.gens.append(RandomIrregularMaskGenerator(**irregular_kwargs))
+-
+-        if box_proba > 0:
+-            self.probas.append(box_proba)
+-            if box_kwargs is None:
+-                box_kwargs = {}
+-            self.gens.append(RandomRectangleMaskGenerator(**box_kwargs))
+-
+-        if segm_proba > 0:
+-            self.probas.append(segm_proba)
+-            if segm_kwargs is None:
+-                segm_kwargs = {}
+-            self.gens.append(RandomSegmentationMaskGenerator(**segm_kwargs))
+-
+-        if squares_proba > 0:
+-            self.probas.append(squares_proba)
+-            if squares_kwargs is None:
+-                squares_kwargs = {}
+-            else:
+-                squares_kwargs = dict(squares_kwargs)
+-            squares_kwargs['draw_method'] = DrawMethod.SQUARE
+-            self.gens.append(RandomIrregularMaskGenerator(**squares_kwargs))
+-
+-        if superres_proba > 0:
+-            self.probas.append(superres_proba)
+-            if superres_kwargs is None:
+-                superres_kwargs = {}
+-            self.gens.append(RandomSuperresMaskGenerator(**superres_kwargs))
+-
+-        if outpainting_proba > 0:
+-            self.probas.append(outpainting_proba)
+-            if outpainting_kwargs is None:
+-                outpainting_kwargs = {}
+-            self.gens.append(OutpaintingMaskGenerator(**outpainting_kwargs))
+-
+-        self.probas = np.array(self.probas, dtype='float32')
+-        self.probas /= self.probas.sum()
+-        self.invert_proba = invert_proba
+-
+-    def __call__(self, img, iter_i=None, raw_image=None):
+-        kind = np.random.choice(len(self.probas), p=self.probas)
+-        gen = self.gens[kind]
+-        result = gen(img, iter_i=iter_i, raw_image=raw_image)
+-        if self.invert_proba > 0 and random.random() < self.invert_proba:
+-            result = 1 - result
+-        return result
+-
+-
+-def get_mask_generator(kind, kwargs):
+-    if kind is None:
+-        kind = "mixed"
+-    if kwargs is None:
+-        kwargs = {}
+-
+-    if kind == "mixed":
+-        cl = MixedMaskGenerator
+-    elif kind == "outpainting":
+-        cl = OutpaintingMaskGenerator
+-    elif kind == "dumb":
+-        cl = DumbAreaMaskGenerator
+-    else:
+-        raise NotImplementedError(f"No such generator kind = {kind}")
+-    return cl(**kwargs)
+diff --git a/prepare_unified_lift_data.py b/prepare_unified_lift_data.py
+new file mode 100644
+index 0000000..c56523d
+--- /dev/null
++++ b/prepare_unified_lift_data.py
+@@ -0,0 +1,64 @@
++# prepare_unifiedlift_data.py
++# This script restructures a raw ScanNet++ scene into the Unified-Lift folder format for geometry-only training.
++
++import os
++import shutil
++import json
++from pathlib import Path
++
++def restructure_scannetpp_scene(scannet_scene_dir, output_scene_dir):
++    """
++    Reorganize ScanNet++ scene into Unified-Lift compatible geometry-only format.
++
++    Args:
++        scannet_scene_dir (str): Path to ScanNet++ scene (e.g. scannetpp_data/scene0207_01)
++        output_scene_dir (str): Path where the converted scene should be stored (e.g. scenes/scene0207_01)
++    """
++    scannet_scene_dir = Path(scannet_scene_dir)
++    output_scene_dir = Path(output_scene_dir)
++
++    # Step 1: Create Unified-Lift folder structure
++    (output_scene_dir / "images").mkdir(parents=True, exist_ok=True)
++    (output_scene_dir / "images_train").mkdir(parents=True, exist_ok=True)
++    sparse_dir = output_scene_dir / "distorted" / "sparse" / "0"
++    sparse_dir.mkdir(parents=True, exist_ok=True)
++
++    # Step 2: Copy all RGB images into images/
++    rgb_src_dir = scannet_scene_dir / "dslr" / "resized_undistorted_images"
++    for img_path in rgb_src_dir.glob("*.jpg"):
++        shutil.copy(img_path, output_scene_dir / "images" / img_path.name)
++
++    # Step 3: Use train_test_lists.json to populate images_train/
++    split_path = scannet_scene_dir / "dslr" / "train_test_lists.json"
++    if split_path.exists():
++        with open(split_path, 'r') as f:
++            split = json.load(f)
++            for img_name in split.get("train", []):
++                src = output_scene_dir / "images" / img_name
++                dst = output_scene_dir / "images_train" / img_name
++                if src.exists():
++                    os.symlink(src, dst)
++                else:
++                    print(f"Warning: training image {img_name} not found")
++    else:
++        print("Warning: train_test_lists.json not found — skipping image_train population")
++
++    # Step 4: Copy COLMAP pose data into sparse folder
++    colmap_dir = scannet_scene_dir / "dslr" / "colmap"
++    for fname in ["cameras.txt", "images.txt", "points3D.txt"]:
++        src_file = colmap_dir / fname
++        if src_file.exists():
++            shutil.copy(src_file, sparse_dir / fname)
++        else:
++            print(f"Warning: {fname} not found in colmap folder")
++
++    print(f"✅ Scene {scannet_scene_dir.name} prepared at {output_scene_dir}")
++
++if __name__ == "__main__":
++    import argparse
++    parser = argparse.ArgumentParser()
++    parser.add_argument("--input", required=True, help="Path to ScanNet++ scene folder")
++    parser.add_argument("--output", required=True, help="Path to output Unified-Lift format folder")
++    args = parser.parse_args()
++
++    restructure_scannetpp_scene(args.input, args.output)
+diff --git a/scene/__init__.py b/scene/__init__.py
+index aeceeb0..cee4c7c 100644
+--- a/scene/__init__.py
++++ b/scene/__init__.py
+@@ -70,7 +70,9 @@ class Scene:
+ 
+         for resolution_scale in resolution_scales:
+             print("Loading Training Cameras")
+-            self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args)
++            train_subset = scene_info.train_cameras[:500]
++            self.train_cameras[resolution_scale] = cameraList_from_camInfos(train_subset, resolution_scale, args)
++
+             print("Loading Test Cameras")
+             self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args)
+ 
+diff --git a/scene/cameras.py b/scene/cameras.py
+index 7f7b356..e98ae05 100644
+--- a/scene/cameras.py
++++ b/scene/cameras.py
+@@ -37,14 +37,14 @@ class Camera(nn.Module):
+             print(f"[Warning] Custom device {data_device} failed, fallback to default cuda device" )
+             self.data_device = torch.device("cuda")
+ 
+-        self.original_image = image.clamp(0.0, 1.0).to(self.data_device)
++        self.original_image = image.clamp(0.0, 1.0)
+         self.image_width = self.original_image.shape[2]
+         self.image_height = self.original_image.shape[1]
+ 
+-        if gt_alpha_mask is not None:
+-            self.original_image *= gt_alpha_mask.to(self.data_device)
+-        else:
+-            self.original_image *= torch.ones((1, self.image_height, self.image_width), device=self.data_device)
++        # if gt_alpha_mask is not None:
++        #     self.original_image *= gt_alpha_mask.to(self.data_device)
++        # else:
++        #     self.original_image *= torch.ones((1, self.image_height, self.image_width), device=self.data_device)
+ 
+         self.zfar = 100.0
+         self.znear = 0.01
+@@ -53,7 +53,17 @@ class Camera(nn.Module):
+         self.scale = scale
+ 
+         self.world_view_transform = torch.tensor(getWorld2View2(R, T, trans, scale)).transpose(0, 1).cuda()
+-        self.projection_matrix = getProjectionMatrix(znear=self.znear, zfar=self.zfar, fovX=self.FoVx, fovY=self.FoVy).transpose(0,1).cuda()
++        print(f"[Camera Init] UID: {self.uid}, FoVx: {self.FoVx}, FoVy: {self.FoVy}")
++
++        proj = getProjectionMatrix(znear=self.znear, zfar=self.zfar, fovX=self.FoVx, fovY=self.FoVy)
++
++        if torch.isnan(proj).any():
++            print(f"⚠️ NaN in projection matrix for UID {self.uid}: FoVx={self.FoVx}, FoVy={self.FoVy}")
++            print("Projection matrix:\n", proj)
++            raise ValueError("Projection matrix contains NaN")
++
++        self.projection_matrix = proj.transpose(0, 1).cuda()
++
+         self.full_proj_transform = (self.world_view_transform.unsqueeze(0).bmm(self.projection_matrix.unsqueeze(0))).squeeze(0)
+         self.camera_center = self.world_view_transform.inverse()[3, :3]
+ 
+diff --git a/scene/dataset_readers.py b/scene/dataset_readers.py
+index 277acec..a5195fa 100644
+--- a/scene/dataset_readers.py
++++ b/scene/dataset_readers.py
+@@ -94,14 +94,7 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, objects_fol
+ 
+         image_path = os.path.join(images_folder, os.path.basename(extr.name))
+         image_name = os.path.basename(image_path).split(".")[0]
+-        # Try to load the image with the original extension first
+         image = Image.open(image_path) if os.path.exists(image_path) else None
+-        # If that fails, try with .png extension
+-        if image is None:
+-            png_path = os.path.splitext(image_path)[0] + '.png'
+-            image = Image.open(png_path) if os.path.exists(png_path) else None
+-        if image is None:
+-            print(f"[WARNING] Could not load image for camera {idx}: {image_path} or {png_path}")
+         object_path = os.path.join(objects_folder, image_name + '.png')
+         objects = Image.open(object_path) if os.path.exists(object_path) else None
+ 
+diff --git a/scene/gaussian_model.py b/scene/gaussian_model.py
+index f2ee0fa..3f0348a 100644
+--- a/scene/gaussian_model.py
++++ b/scene/gaussian_model.py
+@@ -396,54 +396,52 @@ class GaussianModel:
+         self._opacity = optimizable_tensors["opacity"]
+ 
+     def load_ply(self, path):
+-        """Load a PLY file into the Gaussian model."""
+         plydata = PlyData.read(path)
+-        
++
+         xyz = np.stack((np.asarray(plydata.elements[0]["x"]),
+                         np.asarray(plydata.elements[0]["y"]),
+                         np.asarray(plydata.elements[0]["z"])),  axis=1)
+         opacities = np.asarray(plydata.elements[0]["opacity"])[..., np.newaxis]
+-        
++
+         features_dc = np.zeros((xyz.shape[0], 3, 1))
+         features_dc[:, 0, 0] = np.asarray(plydata.elements[0]["f_dc_0"])
+         features_dc[:, 1, 0] = np.asarray(plydata.elements[0]["f_dc_1"])
+         features_dc[:, 2, 0] = np.asarray(plydata.elements[0]["f_dc_2"])
+-        
+-        # Handle features_rest based on max_sh_degree
+-        if self.max_sh_degree > 0:
+-            extra_f_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("f_rest_")]
+-            extra_f_names = sorted(extra_f_names, key = lambda x: int(x.split('_')[-1]))
+-            expected = 3 * (self.max_sh_degree + 1) ** 2 - 3
+-            assert len(extra_f_names) == expected, f"Expected {expected} f_rest_* fields, found {len(extra_f_names)}."
+-            features_extra = np.zeros((xyz.shape[0], len(extra_f_names)))
+-            for idx, attr_name in enumerate(extra_f_names):
+-                features_extra[:, idx] = np.asarray(plydata.elements[0][attr_name])
+-            features_extra = features_extra.reshape((features_extra.shape[0], 3, (self.max_sh_degree + 1) ** 2 - 1))
+-            self._features_rest = nn.Parameter(torch.tensor(features_extra, dtype=torch.float, device="cuda").transpose(1, 2).contiguous().requires_grad_(True))
+-        else:
+-            # Geometry-only: no SH features
+-            self._features_rest = nn.Parameter(torch.empty((xyz.shape[0], 3, 0), dtype=torch.float, device="cuda").transpose(1, 2).contiguous().requires_grad_(True))
+-        
++
++        extra_f_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("f_rest_")]
++        extra_f_names = sorted(extra_f_names, key = lambda x: int(x.split('_')[-1]))
++        assert len(extra_f_names)==3*(self.max_sh_degree + 1) ** 2 - 3
++        features_extra = np.zeros((xyz.shape[0], len(extra_f_names)))
++        for idx, attr_name in enumerate(extra_f_names):
++            features_extra[:, idx] = np.asarray(plydata.elements[0][attr_name])
++        # Reshape (P,F*SH_coeffs) to (P, F, SH_coeffs except DC)
++        features_extra = features_extra.reshape((features_extra.shape[0], 3, (self.max_sh_degree + 1) ** 2 - 1))
++
+         scale_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("scale_")]
+         scale_names = sorted(scale_names, key = lambda x: int(x.split('_')[-1]))
+         scales = np.zeros((xyz.shape[0], len(scale_names)))
+         for idx, attr_name in enumerate(scale_names):
+             scales[:, idx] = np.asarray(plydata.elements[0][attr_name])
+-        
++
+         rot_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("rot")]
+         rot_names = sorted(rot_names, key = lambda x: int(x.split('_')[-1]))
+         rots = np.zeros((xyz.shape[0], len(rot_names)))
+         for idx, attr_name in enumerate(rot_names):
+             rots[:, idx] = np.asarray(plydata.elements[0][attr_name])
+-        
++
++        objects_dc = np.zeros((xyz.shape[0], self.num_objects, 1))
++        for idx in range(self.num_objects):
++            objects_dc[:,idx,0] = np.asarray(plydata.elements[0]["obj_dc_"+str(idx)])
++
+         self._xyz = nn.Parameter(torch.tensor(xyz, dtype=torch.float, device="cuda").requires_grad_(True))
+         self._features_dc = nn.Parameter(torch.tensor(features_dc, dtype=torch.float, device="cuda").transpose(1, 2).contiguous().requires_grad_(True))
+-        
++        self._features_rest = nn.Parameter(torch.tensor(features_extra, dtype=torch.float, device="cuda").transpose(1, 2).contiguous().requires_grad_(True))
+         self._opacity = nn.Parameter(torch.tensor(opacities, dtype=torch.float, device="cuda").requires_grad_(True))
+         self._scaling = nn.Parameter(torch.tensor(scales, dtype=torch.float, device="cuda").requires_grad_(True))
+         self._rotation = nn.Parameter(torch.tensor(rots, dtype=torch.float, device="cuda").requires_grad_(True))
+-        
+-        self.active_sh_degree = 0
++        self._objects_dc = nn.Parameter(torch.tensor(objects_dc, dtype=torch.float, device="cuda").transpose(1, 2).contiguous().requires_grad_(True))
++
++        self.active_sh_degree = self.max_sh_degree
+ 
+     def replace_tensor_to_optimizer(self, tensor, name):
+         optimizable_tensors = {}
+diff --git a/script/detect_surface.py b/script/detect_surface.py
+deleted file mode 100644
+index c187c58..0000000
+--- a/script/detect_surface.py
++++ /dev/null
+@@ -1,119 +0,0 @@
+-import os
+-import sys
+-
+-# Add project root to Python path
+-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+-sys.path.append(project_root)
+-
+-import torch
+-import argparse
+-from scene import Scene, GaussianModel
+-from utils.surface_detection import SurfaceDetector
+-from arguments import ModelParams, PipelineParams
+-from utils.system_utils import searchForMaxIteration
+-
+-def parse_args():
+-    # First create a parser for ModelParams to get its default values
+-    model_parser = argparse.ArgumentParser()
+-    ModelParams(model_parser)
+-    model_defaults = vars(model_parser.parse_args([]))
+-    
+-    # Now create our main parser
+-    parser = argparse.ArgumentParser(description="Detect surfaces from Gaussian splatting model")
+-    
+-    # Create argument groups
+-    model_group = parser.add_argument_group("Model Parameters")
+-    detector_group = parser.add_argument_group("Surface Detector Parameters")
+-    io_group = parser.add_argument_group("Input/Output Parameters")
+-    
+-    # Model parameters (using defaults from ModelParams)
+-    model_group.add_argument("--model_path", required=True, help="Path to the model directory")
+-    model_group.add_argument("--iteration", type=int, default=-1, help="Model iteration to load (-1 for latest)")
+-    model_group.add_argument("--source_path", default=model_defaults.get("source_path", ""), help="Path to the source data")
+-    model_group.add_argument("--images", default=model_defaults.get("images", ""), help="Path to the images")
+-    model_group.add_argument("--eval", action="store_true", default=model_defaults.get("eval", False), help="Evaluation mode")
+-    model_group.add_argument("--object_path", default=model_defaults.get("object_path", ""), help="Path to object data")
+-    model_group.add_argument("--n_views", type=int, default=model_defaults.get("n_views", 0), help="Number of views")
+-    model_group.add_argument("--random_init", action="store_true", default=model_defaults.get("random_init", False), help="Random initialization")
+-    model_group.add_argument("--train_split", type=float, default=model_defaults.get("train_split", 0.8), help="Training split ratio")
+-    
+-    # Surface detector parameters
+-    detector_group.add_argument("--opacity_threshold", type=float, default=0.5, help="Minimum opacity threshold")
+-    detector_group.add_argument("--scale_threshold", type=float, default=0.1, help="Maximum scale threshold")
+-    detector_group.add_argument("--density_threshold", type=float, default=0.1, help="Minimum density threshold")
+-    detector_group.add_argument("--k_neighbors", type=int, default=8, help="Number of neighbors for density estimation")
+-    
+-    # I/O parameters
+-    io_group.add_argument("--output_dir", default="output/surface", help="Output directory for visualizations")
+-    io_group.add_argument("--save_ply", action="store_true", help="Save surface as PLY file")
+-    
+-    return parser.parse_args()
+-
+-def main():
+-    args = parse_args()
+-    
+-    # Create output directory
+-    os.makedirs(args.output_dir, exist_ok=True)
+-    
+-    # Create a new parser for ModelParams with only the required arguments
+-    model_parser = argparse.ArgumentParser()
+-    model_params = ModelParams(model_parser)
+-    
+-    # Set model parameters from our args
+-    model_params.model_path = args.model_path
+-    model_params.source_path = args.source_path
+-    model_params.images = args.images
+-    model_params.eval = args.eval
+-    model_params.object_path = args.object_path
+-    model_params.n_views = args.n_views
+-    model_params.random_init = args.random_init
+-    model_params.train_split = args.train_split
+-    
+-    # Load model
+-    gaussians = GaussianModel(0)  # sh_degree=0 for visualization
+-    
+-    # Find latest iteration if not specified
+-    if args.iteration == -1:
+-        args.iteration = searchForMaxIteration(os.path.join(args.model_path, "point_cloud"))
+-    
+-    # Load scene
+-    scene = Scene(model_params, gaussians, load_iteration=args.iteration)
+-    
+-    # Initialize surface detector
+-    detector = SurfaceDetector(
+-        opacity_threshold=args.opacity_threshold,
+-        scale_threshold=args.scale_threshold,
+-        density_threshold=args.density_threshold,
+-        k_neighbors=args.k_neighbors
+-    )
+-    
+-    # Get Gaussian parameters
+-    xyz = gaussians.get_xyz
+-    opacity = gaussians.get_opacity
+-    scaling = gaussians.get_scaling
+-    
+-    # Compute scene extent
+-    scene_extent = torch.max(torch.norm(xyz, dim=1)).item()
+-    
+-    # Extract surface points
+-    surface_points, surface_normals = detector.extract_surface_points(
+-        xyz, opacity, scaling, scene_extent
+-    )
+-    
+-    print(f"Found {len(surface_points)} surface points")
+-    
+-    # Visualize surface
+-    if args.save_ply:
+-        # Extract scene name from model path
+-        scene_name = os.path.basename(os.path.normpath(args.model_path))
+-        # Create filename with scene name and surface detection parameters
+-        param_str = f"op{detector.opacity_threshold:.1f}_sc{detector.scale_threshold:.2f}_de{detector.density_threshold:.1f}_k{detector.k_neighbors}"
+-        save_path = os.path.join(args.output_dir, f"{scene_name}_surface_iter{args.iteration}_{param_str}.ply")
+-    else:
+-        save_path = None
+-    
+-    detector.visualize_surface(surface_points, surface_normals, save_path)
+-
+-    # For hash grid testing
+-if __name__ == "__main__":
+-    main() 
+\ No newline at end of file
+diff --git a/script/detect_surface.sh b/script/detect_surface.sh
+deleted file mode 100755
+index 947b13e..0000000
+--- a/script/detect_surface.sh
++++ /dev/null
+@@ -1,36 +0,0 @@
+-#!/bin/bash
+-
+-# Model parameters
+-MODEL_PATH="output/unifed_lift/teatime"
+-SOURCE_PATH="data/lerf/teatime"
+-IMAGES_PATH=images
+-ITERATION=30000
+-
+-# Surface detection parameters
+-OPACITY_THRESH=0.8
+-SCALE_THRESH=0.03
+-DENSITY_THRESH=0.3
+-K_NEIGHBORS=16
+-
+-# Output parameters
+-OUTPUT_DIR="output/surface/teatime"
+-SAVE_PLY=true
+-EVAL=false
+-N_VIEWS=100
+-TRAIN_SPLIT=0.0
+-
+-# Run surface detection
+-python script/detect_surface.py \
+-    --model_path $MODEL_PATH \
+-    --source_path $SOURCE_PATH \
+-    --images $IMAGES_PATH \
+-    --iteration $ITERATION \
+-    --opacity_threshold $OPACITY_THRESH \
+-    --scale_threshold $SCALE_THRESH \
+-    --density_threshold $DENSITY_THRESH \
+-    --k_neighbors $K_NEIGHBORS \
+-    --output_dir $OUTPUT_DIR \
+-    $([ "$SAVE_PLY" = true ] && echo "--save_ply") \
+-    $([ "$EVAL" = true ] && echo "--eval") \
+-    --n_views $N_VIEWS \
+-    --train_split $TRAIN_SPLIT 
+\ No newline at end of file
+diff --git a/script/minkowski_voxel_grid.py b/script/minkowski_voxel_grid.py
+deleted file mode 100644
+index 4b52467..0000000
+--- a/script/minkowski_voxel_grid.py
++++ /dev/null
+@@ -1,150 +0,0 @@
+-import os
+-import sys
+-
+-# Add project root to Python path
+-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+-sys.path.insert(0, project_root)
+-
+-import numpy as np
+-import torch
+-from scene import Scene, GaussianModel
+-from arguments import ModelParams
+-from utils.hash_grid import MinkowskiVoxelGrid
+-
+-def parse_args():
+-    import argparse
+-    parser = argparse.ArgumentParser(description="Standalone MinkowskiEngine voxel grid generator")
+-    parser.add_argument("--model_path", required=True, help="Path to the model directory")
+-    parser.add_argument("--iteration", type=int, default=-1, help="Model iteration to load (-1 for latest)")
+-    parser.add_argument("--source_path", default="", help="Path to the source data")
+-    parser.add_argument("--images", default="", help="Path to the images")
+-    parser.add_argument("--eval", action="store_true", help="Evaluation mode")
+-    parser.add_argument("--object_path", default="", help="Path to object data")
+-    parser.add_argument("--n_views", type=int, default=0, help="Number of views")
+-    parser.add_argument("--random_init", action="store_true", help="Random initialization")
+-    parser.add_argument("--train_split", type=float, default=0.8, help="Training split ratio")
+-    parser.add_argument("--cell_size", type=float, default=0.05, help="Size of voxel grid cells")
+-    parser.add_argument("--output_dir", default="output/minkowski_grid", help="Output directory for visualizations")
+-    return parser.parse_args()
+-
+-def main():
+-    args = parse_args()
+-    os.makedirs(args.output_dir, exist_ok=True)
+-    gaussians = GaussianModel(0)
+-    if args.iteration == -1:
+-        from utils.system_utils import searchForMaxIteration
+-        chkpnt_dir = os.path.join(args.model_path, "chkpnts")
+-        args.iteration = searchForMaxIteration(chkpnt_dir)
+-        checkpoint_path = os.path.join(chkpnt_dir, f"iteration_{args.iteration}.pth")
+-    else:
+-        chkpnt_dir = os.path.join(args.model_path, "chkpnts")
+-        checkpoint_path = os.path.join(chkpnt_dir, f"iteration_{args.iteration}.pth")
+-        
+-    import argparse
+-    model_parser = argparse.ArgumentParser()
+-    model_params = ModelParams(model_parser)
+-    model_params.model_path = args.model_path
+-    model_params.source_path = args.source_path
+-    model_params.images = args.images
+-    model_params.eval = args.eval
+-    model_params.object_path = args.object_path
+-    model_params.n_views = args.n_views
+-    model_params.random_init = args.random_init
+-    model_params.train_split = args.train_split
+-    scene = Scene(model_params, gaussians, load_iteration=args.iteration)
+-    surface_points = gaussians.get_xyz
+-    device = surface_points.device if hasattr(surface_points, 'device') else ('cuda' if torch.cuda.is_available() else 'cpu')
+-    # Use DC color if available, else gray
+-    try:
+-        colors = gaussians._features_dc.detach().cpu().numpy()  # shape [N, 1, 3]
+-        if colors.shape[1] == 1 and colors.shape[2] == 3:
+-            colors = colors[:, 0, :]  # Now shape [N, 3]
+-        else:
+-            print("Warning: Unexpected DC color shape, using gray.")
+-            colors = np.ones_like(surface_points.cpu().numpy()) * 0.5
+-        colors = np.clip(colors, 0, 1)
+-        colors = torch.from_numpy(colors).to(device)
+-    except Exception as e:
+-        print(f"Warning: Could not extract DC color ({{e}}). Exported points will be gray.")
+-        colors = torch.ones_like(surface_points) * 0.5
+-    # --- Filter for dense surface regions (if available) ---
+-    if hasattr(gaussians, "get_opacity"):
+-        opacity = gaussians.get_opacity
+-        mask = (opacity > 0.15).squeeze()
+-        surface_points = surface_points[mask]
+-        colors = colors[mask]
+-        print(f"Filtered to {surface_points.shape[0]} high-opacity points.")
+-
+-    # --- Estimate voxel size for ~10,000 voxels ---
+-    if torch.is_tensor(surface_points):
+-        min_corner = surface_points.min(dim=0)[0]
+-        max_corner = surface_points.max(dim=0)[0]
+-        bbox = max_corner - min_corner
+-        bbox_prod = bbox.prod().item()
+-    else:
+-        min_corner = np.min(surface_points, axis=0)
+-        max_corner = np.max(surface_points, axis=0)
+-        bbox = max_corner - min_corner
+-        bbox_prod = np.prod(bbox)
+-    target_voxels = 5000000*50000 # Adjusted target voxels for larger scenes
+-    voxel_size = (bbox_prod / target_voxels)
+-    print(f"Auto-tuned voxel size for ~{target_voxels} voxels: {voxel_size:.3f}")
+-
+-    if not isinstance(surface_points, torch.Tensor):
+-        surface_points_tensor = torch.from_numpy(np.asarray(surface_points)).to(device)
+-    else:
+-        surface_points_tensor = surface_points.to(device)
+-    if not isinstance(colors, torch.Tensor):
+-        colors = torch.from_numpy(np.asarray(colors)).to(device)
+-    else:
+-        colors = colors.to(device)
+-    print(f"[DEBUG] surface_points_tensor type: {type(surface_points_tensor)}, device: {surface_points_tensor.device}")
+-    print(f"[DEBUG] colors type: {type(colors)}, device: {colors.device}")
+-    print(f"[DEBUG] surface_points_tensor shape: {surface_points_tensor.shape}")
+-    print(f"[DEBUG] colors shape: {colors.shape}")
+-    minkowski_grid = MinkowskiVoxelGrid(surface_points_tensor, colors=colors, voxel_size=voxel_size, device=device)
+-    voxel_centers_raw = minkowski_grid.get_voxel_centers().detach().cpu().numpy()
+-    print(f"[DEBUG] voxel_centers_raw shape: {voxel_centers_raw.shape}")
+-    scene_name = os.path.basename(os.path.normpath(args.model_path))
+-    minkowski_base = f"{scene_name}_minkowski_{len(minkowski_grid)}vox_iter{args.iteration}"
+-    minkowski_points_path = os.path.join(args.output_dir, minkowski_base + "_points.ply")
+-    minkowski_grid_path = os.path.join(args.output_dir, minkowski_base + "_grid.ply")
+-    import open3d as o3d
+-    # Ensure voxel_centers is 2D, float64, and contiguous for Open3D
+-    voxel_centers = minkowski_grid.get_voxel_centers().detach().cpu().numpy()
+-    voxel_centers = np.asarray(voxel_centers)
+-    # Robust shape handling
+-    if voxel_centers.ndim == 1:
+-        if voxel_centers.size == 0:
+-            print("[Warning] No voxel centers to export.")
+-            return
+-        if voxel_centers.size % 3 != 0:
+-            print(f"[Error] Unexpected voxel_centers size: {voxel_centers.size}. Cannot reshape to (N,3). Skipping export.")
+-            return
+-        voxel_centers = voxel_centers.reshape(-1, 3)
+-    elif voxel_centers.ndim == 2 and voxel_centers.shape[1] != 3:
+-        print(f"[Error] Unexpected voxel_centers shape: {voxel_centers.shape}. Skipping export.")
+-        return
+-    if not voxel_centers.flags['C_CONTIGUOUS']:
+-        voxel_centers = np.ascontiguousarray(voxel_centers)
+-    voxel_centers = voxel_centers.astype(np.float64)
+-    pcd = o3d.geometry.PointCloud()
+-    pcd.points = o3d.utility.Vector3dVector(voxel_centers)
+-    feats = minkowski_grid.get_features().cpu().numpy()
+-    if feats.shape[1] == 3:
+-        feats = np.asarray(feats)
+-        if feats.ndim != 2 or feats.shape[1] != 3:
+-            feats = feats.reshape(-1, 3)
+-        if not feats.flags['C_CONTIGUOUS']:
+-            feats = np.ascontiguousarray(feats)
+-        feats = feats.astype(np.float64)
+-        pcd.colors = o3d.utility.Vector3dVector(np.clip(feats, 0, 1))
+-    else:
+-        pcd.colors = o3d.utility.Vector3dVector(np.ones_like(voxel_centers))
+-    o3d.io.write_point_cloud(minkowski_points_path, pcd)
+-    print(f"Saved MinkowskiEngine voxel centers to {minkowski_points_path}")
+-    o3d.io.write_point_cloud(minkowski_grid_path, pcd)
+-    print(f"Saved MinkowskiEngine voxel grid to {minkowski_grid_path}")
+-
+-if __name__ == "__main__":
+-    main()
+diff --git a/script/minkowski_voxel_grid.sh b/script/minkowski_voxel_grid.sh
+deleted file mode 100644
+index 7a3c504..0000000
+--- a/script/minkowski_voxel_grid.sh
++++ /dev/null
+@@ -1,18 +0,0 @@
+-#!/bin/bash
+-
+-# Default parameters
+-MODEL_PATH="output/unifed_lift/teatime"  # Path to the trained model
+-SOURCE_PATH="data/lerf/teatime"  # Path to source data
+-IMAGES_PATH="images"  # Path to images (relative to SOURCE_PATH)
+-ITERATION=-1  # Use latest iteration
+-CELL_SIZE=0.05  # Size of voxel grid cells
+-OUTPUT_DIR="output/minkowski_grid"
+-
+-# Run standalone Minkowski voxel grid generator
+-python script/minkowski_voxel_grid.py \
+-    --model_path $MODEL_PATH \
+-    --source_path $SOURCE_PATH \
+-    --images $IMAGES_PATH \
+-    --iteration $ITERATION \
+-    --cell_size $CELL_SIZE \
+-    --output_dir $OUTPUT_DIR
+diff --git a/script/run_colmap_7b898d2d22.sh b/script/run_colmap_7b898d2d22.sh
+new file mode 100755
+index 0000000..6e3cbf9
+--- /dev/null
++++ b/script/run_colmap_7b898d2d22.sh
+@@ -0,0 +1,28 @@
++
++# 1. Set working directories
++mkdir -p workspace_7b898d2d22
++cd workspace_7b898d2d22
++mkdir -p images sparse
++
++# 2. Copy all undistorted images into `images/`
++cp -r ../../data/7b898d2d22/dslr/resized_undistorted_images/* images/
++
++# 3. Extract features with PINHOLE camera model (no GUI)
++DISPLAY="" colmap feature_extractor \
++    --database_path database.db \
++    --image_path images \
++    --ImageReader.camera_model PINHOLE \
++    --ImageReader.single_camera 1 \
++    --SiftExtraction.use_gpu 0
++
++# 4. Match features (no GUI)
++DISPLAY="" colmap exhaustive_matcher \
++    --database_path database.db \
++    --SiftMatching.use_gpu 0
++
++# 5. Reconstruct sparse model
++colmap mapper \
++    --database_path database.db \
++    --image_path images \
++    --output_path sparse \
++    --Mapper.num_threads 1
+diff --git a/script/test_hash_grid.py b/script/test_hash_grid.py
+deleted file mode 100644
+index 45b01b3..0000000
+--- a/script/test_hash_grid.py
++++ /dev/null
+@@ -1,383 +0,0 @@
+-import os
+-import sys
+-import time
+-import numpy as np
+-
+-# Add project root to Python path
+-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+-sys.path.append(project_root)
+-
+-import torch
+-import argparse
+-from tqdm import tqdm
+-
+-from utils.surface_detection import SurfaceDetector
+-from utils.hash_grid import HashGrid, MinkowskiVoxelGrid
+-from scene import Scene, GaussianModel
+-from arguments import ModelParams, PipelineParams
+-from utils.system_utils import searchForMaxIteration
+-
+-def parse_args():
+-    # First create a parser for ModelParams to get its default values
+-    model_parser = argparse.ArgumentParser()
+-    ModelParams(model_parser)
+-    model_defaults = vars(model_parser.parse_args([]))
+-    
+-    # Now create our main parser
+-    parser = argparse.ArgumentParser(description="Test hash grid implementation with surface detection")
+-    
+-    # Create argument groups
+-    model_group = parser.add_argument_group("Model Parameters")
+-    grid_group = parser.add_argument_group("Hash Grid Parameters")
+-    io_group = parser.add_argument_group("Input/Output Parameters")
+-    
+-    # Model parameters (using defaults from ModelParams)
+-    model_group.add_argument("--model_path", required=True, help="Path to the model directory")
+-    model_group.add_argument("--iteration", type=int, default=-1, help="Model iteration to load (-1 for latest)")
+-    model_group.add_argument("--source_path", default=model_defaults.get("source_path", ""), help="Path to the source data")
+-    model_group.add_argument("--images", default=model_defaults.get("images", ""), help="Path to the images")
+-    model_group.add_argument("--eval", action="store_true", default=model_defaults.get("eval", False), help="Evaluation mode")
+-    model_group.add_argument("--object_path", default=model_defaults.get("object_path", ""), help="Path to object data")
+-    model_group.add_argument("--n_views", type=int, default=model_defaults.get("n_views", 0), help="Number of views")
+-    model_group.add_argument("--random_init", action="store_true", default=model_defaults.get("random_init", False), help="Random initialization")
+-    model_group.add_argument("--train_split", type=float, default=model_defaults.get("train_split", 0.8), help="Training split ratio")
+-    
+-    # Hash grid parameters
+-    grid_group.add_argument("--cell_size", type=float, default=0.05, help="Size of hash grid cells")
+-    grid_group.add_argument("--hash_size", type=int, default=2**20, help="Size of hash table")
+-    grid_group.add_argument("--max_points_per_cell", type=int, default=32, help="Maximum points per cell")
+-    grid_group.add_argument("--test_queries", type=int, default=1000, help="Number of test queries to perform")
+-    grid_group.add_argument("--reg_grid", action="store_true", help="Use regular (structured) grid instead of adaptive hash grid")
+-    grid_group.add_argument("--target_voxel_count", type=int, default=50000, help="Target number of voxels for regular (structured) grid")
+-    
+-    # I/O parameters
+-    io_group.add_argument("--output_dir", default="output/hash_grid", help="Output directory for visualizations")
+-    io_group.add_argument("--save_ply", action="store_true", help="Save visualization as PLY files")
+-    
+-    # Add new arguments
+-    parser.add_argument("--query_batch_size", type=int, default=100,
+-                      help="Number of queries to process in each batch")    
+-    parser.add_argument("--minkowski", action="store_true", help="Only run the MinkowskiEngine voxel grid output and skip other processing.")
+-    
+-    return parser.parse_args()
+-
+-def main():
+-    args = parse_args()
+-    
+-    # Create output directory
+-    os.makedirs(args.output_dir, exist_ok=True)
+-
+-    if args.minkowski:
+-        # --- BEGIN: Robust checkpoint search for Minkowski mode ---
+-        chkpnt_dir = os.path.join(args.model_path, "chkpnts")
+-        if not os.path.exists(chkpnt_dir):
+-            chkpnt_dir = os.path.join(args.model_path, "point_cloud")
+-        if args.iteration == -1:
+-            args.iteration = searchForMaxIteration(chkpnt_dir)
+-        # Find checkpoint file robustly
+-        import glob, re
+-        ckpt_pattern = os.path.join(chkpnt_dir, "*%d.pth" % args.iteration)
+-        ckpt_files = glob.glob(ckpt_pattern)
+-        if not ckpt_files:
+-            # Try any .pth file with the right iteration number
+-            ckpt_files = [f for f in glob.glob(os.path.join(chkpnt_dir, "*.pth")) if re.search(rf"[._-]{args.iteration}(?:\\.pth)?$", f)]
+-        if not ckpt_files:
+-            raise FileNotFoundError(f"No checkpoint found for iteration {args.iteration} in {chkpnt_dir}")
+-        ckpt_path = ckpt_files[0]
+-        print(f"[INFO] Loading checkpoint: {ckpt_path}")
+-        # Minimal model/scene loading for MinkowskiEngine output only
+-        gaussians = GaussianModel(0)
+-        model_parser = argparse.ArgumentParser()
+-        model_params = ModelParams(model_parser)
+-        model_params.model_path = args.model_path
+-        model_params.source_path = args.source_path
+-        model_params.images = args.images
+-        model_params.eval = args.eval
+-        model_params.object_path = args.object_path
+-        model_params.n_views = args.n_views
+-        model_params.random_init = args.random_init
+-        model_params.train_split = args.train_split
+-        scene = Scene(model_params, gaussians, load_iteration=args.iteration)
+-        # Use all points for Minkowski grid
+-        surface_points = gaussians.get_xyz
+-        # Use DC color if available, else white
+-        device = surface_points.device if hasattr(surface_points, 'device') else ('cuda' if torch.cuda.is_available() else 'cpu')
+-        if hasattr(gaussians, "get_features_dc"):
+-            colors = gaussians.get_features_dc.detach()
+-            # Robustly extract RGB from possible shapes
+-            if colors.ndim == 3 and colors.shape[1] == 1 and colors.shape[2] == 3:
+-                colors = colors[:, 0, :]
+-            elif colors.ndim == 2 and colors.shape[1] >= 3:
+-                colors = colors[:, :3]
+-            else:
+-                colors = torch.ones_like(surface_points)  # fallback to white
+-            # Normalize if needed (assume >1 means not normalized)
+-            if colors.max() > 1.0:
+-                colors = colors / 255.0
+-        else:
+-            colors = torch.ones_like(surface_points)
+-        if not isinstance(surface_points, torch.Tensor):
+-            surface_points_tensor = torch.from_numpy(np.asarray(surface_points)).to(device)
+-        else:
+-            surface_points_tensor = surface_points.to(device)
+-        if not isinstance(colors, torch.Tensor):
+-            colors = torch.from_numpy(np.asarray(colors)).to(device)
+-        else:
+-            colors = colors.to(device)
+-        print(f"[DEBUG] surface_points_tensor type: {type(surface_points_tensor)}, device: {surface_points_tensor.device}")
+-        print(f"[DEBUG] colors type: {type(colors)}, device: {colors.device}")
+-        minkowski_grid = MinkowskiVoxelGrid(surface_points_tensor, colors=colors, voxel_size=args.cell_size, device=device)
+-        scene_name = os.path.basename(os.path.normpath(args.model_path))
+-        minkowski_base = f"{scene_name}_minkowski_{len(minkowski_grid)}vox_iter{args.iteration}"
+-        minkowski_points_path = os.path.join(args.output_dir, minkowski_base + "_points.ply")
+-        minkowski_grid_path = os.path.join(args.output_dir, minkowski_base + "_grid.ply")
+-        import open3d as o3d
+-        voxel_centers = minkowski_grid.get_voxel_centers().cpu().numpy()
+-        pcd = o3d.geometry.PointCloud()
+-        pcd.points = o3d.utility.Vector3dVector(voxel_centers)
+-        feats = minkowski_grid.get_features().cpu().numpy()
+-        if feats.shape[1] == 3:
+-            pcd.colors = o3d.utility.Vector3dVector(np.clip(feats, 0, 1))
+-        else:
+-            pcd.colors = o3d.utility.Vector3dVector(np.ones_like(voxel_centers))
+-        o3d.io.write_point_cloud(minkowski_points_path, pcd)
+-        print(f"Saved MinkowskiEngine voxel centers to {minkowski_points_path}")
+-        o3d.io.write_point_cloud(minkowski_grid_path, pcd)
+-        print(f"Saved MinkowskiEngine voxel grid to {minkowski_grid_path}")
+-        return
+-    # Create a new parser for ModelParams with only the required arguments
+-    model_parser = argparse.ArgumentParser()
+-    model_params = ModelParams(model_parser)
+-    
+-    # Set model parameters from our args
+-    model_params.model_path = args.model_path
+-    model_params.source_path = args.source_path
+-    model_params.images = args.images
+-    model_params.eval = args.eval
+-    model_params.object_path = args.object_path
+-    model_params.n_views = args.n_views
+-    model_params.random_init = args.random_init
+-    model_params.train_split = args.train_split
+-    
+-    # Load model
+-    gaussians = GaussianModel(0)  # sh_degree=0 for visualization
+-    
+-    # Find latest iteration if not specified
+-    if args.iteration == -1:
+-        args.iteration = searchForMaxIteration(os.path.join(args.model_path, "point_cloud"))
+-    
+-    # Load scene
+-    scene = Scene(model_params, gaussians, load_iteration=args.iteration)
+-    
+-    # Initialize surface detector with more aggressive filtering for dense geometry
+-    detector = SurfaceDetector(
+-        opacity_threshold=0.8,    # High opacity for solid surfaces
+-        scale_threshold=0.02,     # Smaller scale threshold to focus on detailed geometry
+-        density_threshold=0.4,    # Higher density threshold to focus on concentrated areas
+-        k_neighbors=16,          # More neighbors for better density estimation
+-        spatial_concentration_threshold=0.4,  # Higher threshold for spatial concentration
+-        min_cluster_size=50      # Smaller minimum cluster size to allow for smaller dense regions
+-    )
+-    
+-    # Get Gaussian parameters
+-    xyz = gaussians.get_xyz
+-    opacity = gaussians.get_opacity
+-    scaling = gaussians.get_scaling
+-    
+-    # Compute scene extent before surface detection
+-    scene_extent = torch.max(torch.norm(xyz, dim=1)).item()
+-    print(f"Scene extent: {scene_extent:.3f}")
+-    
+-    # Extract surface points
+-    print("Extracting surface points...")
+-    surface_points, surface_normals = detector.extract_surface_points(
+-        xyz, opacity, scaling, scene_extent
+-    )
+-    print(f"Found {len(surface_points)} surface points")
+-    
+-    # Calculate cell sizes
+-    base_cell_size = scene_extent / 50  # Base size for sparse regions
+-    min_cell_size = base_cell_size * 0.2  # Much smaller cells in dense regions
+-    max_cell_size = base_cell_size * 1.5  # Larger cells in sparse regions
+-    
+-    print(f"\nCell Size Parameters:")
+-    print(f"Base cell size: {base_cell_size:.3f}")
+-    print(f"Minimum cell size (dense regions): {min_cell_size:.3f}")
+-    print(f"Maximum cell size (sparse regions): {max_cell_size:.3f}")
+-    
+-    # Create grid
+-    grid = HashGrid(
+-        min_cell_size=min_cell_size,
+-        max_cell_size=max_cell_size,
+-        hash_size=args.hash_size,
+-        max_points_per_cell=args.max_points_per_cell,
+-        confidence_threshold=0.5,
+-        curvature_threshold=0.1,
+-        concentration_weight=0.5,
+-        density_weight=0.4,
+-        curvature_weight=0.1
+-    )
+-    
+-    # Build grid
+-    if args.reg_grid:
+-        print("Building regular (structured) grid...")
+-        # Compute bounding box to estimate cell size for ~50,000 voxels
+-        min_corner = surface_points.min(dim=0)[0]
+-        max_corner = surface_points.max(dim=0)[0]
+-        bbox = max_corner - min_corner
+-        target_voxels = args.target_voxel_count
+-        cell_size = (bbox.prod().item() / target_voxels) ** (1/3)
+-        cell_size = cell_size * 0.1  # Make grid even finer to increase number of non-empty voxels
+-        print(f"Auto-tuned cell size for ~{target_voxels} voxels (after refinement): {cell_size:.3f}")
+-        grid.build_structured_grid(
+-            points=surface_points,
+-            cell_size=cell_size,
+-            confidence=None,
+-            target_voxel_count=args.target_voxel_count
+-        )
+-        grid_type = "reg_grid"
+-        voxel_count = len(grid.hash_table)
+-
+-
+-    # --- BEGIN: Filter out voxels with less than average points ---
+-    if args.minkowski:
+-        # Count points per voxel
+-        point_counts = [len(indices) for indices in grid.hash_table.values()]
+-        if len(point_counts) == 0:
+-            avg_points = 0
+-        else:
+-            avg_points = sum(point_counts) / len(point_counts)
+-
+-        # Only keep voxels with at least the average number of points
+-        filtered_hash_table = {}
+-        for cell_hash, indices in grid.hash_table.items():
+-            if len(indices) >= avg_points:
+-                filtered_hash_table[cell_hash] = indices
+-        grid.hash_table = filtered_hash_table
+-
+-        print(f"Filtered voxels: {len(grid.hash_table)} remain with >= average ({avg_points:.1f}) points per voxel")
+-    # --- END: Filter out voxels with less than average points ---
+-    else:
+-        print("Building adaptive hash grid...")
+-        grid.build(
+-            points=surface_points,
+-            normals=surface_normals,
+-            confidence=None
+-        )
+-        grid_type = "hash_grid"
+-        voxel_count = len(grid.hash_table)
+-    
+-    # Test queries
+-    print(f"\nPerforming {args.test_queries} test queries...")
+-    query_batch_size = args.query_batch_size
+-    total_queries = args.test_queries
+-    total_time = 0
+-    total_success = 0
+-    
+-    for batch_start in tqdm(range(0, total_queries, query_batch_size), desc="Testing queries"):
+-        batch_end = min(batch_start + query_batch_size, total_queries)
+-        batch_size = batch_end - batch_start
+-        
+-        # Generate random query points within scene bounds
+-        query_points = torch.rand((batch_size, 3), device=surface_points.device) * scene_extent
+-        
+-        try:
+-            # Time the query
+-            start_time = time.time()
+-            indices, distances = grid.query_points(query_points, k=8)
+-            batch_time = time.time() - start_time
+-            total_time += batch_time
+-            
+-            # Count successful queries (those with at least one valid neighbor)
+-            valid_queries = (indices != -1).any(dim=1).sum().item()
+-            total_success += valid_queries
+-            
+-            # Print batch statistics
+-            print(f"\nBatch {batch_start//query_batch_size + 1}:")
+-            print(f"  Queries: {batch_size}")
+-            print(f"  Valid queries: {valid_queries}")
+-            print(f"  Average time per query: {batch_time/batch_size*1000:.2f}ms")
+-            
+-        except Exception as e:
+-            print(f"\nWarning: Error in batch {batch_start//query_batch_size + 1}: {str(e)}")
+-            continue
+-    
+-    # Print final statistics
+-    print("\nFinal Statistics:")
+-    print(f"Total queries: {total_queries}")
+-    print(f"Successful queries: {total_success}")
+-    print(f"Success rate: {total_success/total_queries*100:.1f}%")
+-    print(f"Average time per query: {total_time/total_queries*1000:.2f}ms")
+-    
+-    # Visualization and output
+-    if args.save_ply:
+-        scene_name = os.path.basename(os.path.normpath(args.model_path))
+-        if args.reg_grid:
+-            base_name = f"{scene_name}_reg_grid_{voxel_count}vox_iter{args.iteration}_op{detector.opacity_threshold}_sc{detector.scale_threshold}_de{detector.density_threshold}_k{detector.k_neighbors}"
+-        else:
+-            base_name = f"{scene_name}_hash_grid_iter{args.iteration}_op{detector.opacity_threshold}_sc{detector.scale_threshold}_de{detector.density_threshold}_k{detector.k_neighbors}"
+-        points_path = os.path.join(args.output_dir, base_name + "_points.ply")
+-        grid_path = os.path.join(args.output_dir, base_name + "_grid.ply")
+-        grid.visualize_points(points_path)
+-        grid.visualize_grid(grid_path)
+-        print(f"Saved point cloud to {points_path}")
+-        print(f"Saved grid visualization to {grid_path}")
+-    else:
+-        print(f"Visualizing {grid_type} (this may take a while)...")
+-        grid.visualize(None)
+-
+-    # After extracting surface points, create Minkowski voxel grid for debugging
+-    try:
+-        # Ensure surface_points and colors are torch tensors on the correct device
+-        device = surface_points.device if hasattr(surface_points, 'device') else ('cuda' if torch.cuda.is_available() else 'cpu')
+-        if not isinstance(surface_points, torch.Tensor):
+-            surface_points_tensor = torch.from_numpy(np.asarray(surface_points)).to(device)
+-        else:
+-            surface_points_tensor = surface_points.to(device)
+-        if hasattr(gaussians, "get_features_dc"):
+-            colors = gaussians.get_features_dc.detach()
+-            # Robustly extract RGB from possible shapes
+-            if colors.ndim == 3 and colors.shape[1] == 1 and colors.shape[2] == 3:
+-                colors = colors[:, 0, :]
+-            elif colors.ndim == 2 and colors.shape[1] >= 3:
+-                colors = colors[:, :3]
+-            else:
+-                colors = torch.ones_like(surface_points_tensor)  # fallback to white
+-            # Normalize if needed (assume >1 means not normalized)
+-            if colors.max() > 1.0:
+-                colors = colors / 255.0
+-        else:
+-            colors = torch.ones_like(surface_points_tensor)
+-        if not isinstance(colors, torch.Tensor):
+-            colors = torch.from_numpy(np.asarray(colors)).to(device)
+-        else:
+-            colors = colors.to(device)
+-        # Debug: print types and devices
+-        print(f"[DEBUG] surface_points_tensor type: {type(surface_points_tensor)}, device: {surface_points_tensor.device}")
+-        print(f"[DEBUG] colors type: {type(colors)}, device: {colors.device}")
+-        minkowski_grid = MinkowskiVoxelGrid(surface_points_tensor, colors=colors, voxel_size=args.cell_size, device=device)
+-        scene_name = os.path.basename(os.path.normpath(args.model_path))
+-        minkowski_base = f"{scene_name}_minkowski_{len(minkowski_grid)}vox_iter{args.iteration}_op{detector.opacity_threshold}_sc{detector.scale_threshold}_de{detector.density_threshold}_k{detector.k_neighbors}"
+-        minkowski_points_path = os.path.join(args.output_dir, minkowski_base + "_points.ply")
+-        minkowski_grid_path = os.path.join(args.output_dir, minkowski_base + "_grid.ply")
+-        # Save voxel centers as point cloud
+-        import open3d as o3d
+-        voxel_centers = minkowski_grid.get_voxel_centers().cpu().numpy()
+-        pcd = o3d.geometry.PointCloud()
+-        pcd.points = o3d.utility.Vector3dVector(voxel_centers)
+-        # Use features as colors if available
+-        feats = minkowski_grid.get_features().cpu().numpy()
+-        if feats.shape[1] == 3:
+-            pcd.colors = o3d.utility.Vector3dVector(np.clip(feats, 0, 1))
+-        else:
+-            pcd.colors = o3d.utility.Vector3dVector(np.ones_like(voxel_centers))
+-        o3d.io.write_point_cloud(minkowski_points_path, pcd)
+-        print(f"Saved MinkowskiEngine voxel centers to {minkowski_points_path}")
+-        # Optionally, save a voxel grid mesh (as points only for now)
+-        o3d.io.write_point_cloud(minkowski_grid_path, pcd)
+-        print(f"Saved MinkowskiEngine voxel grid to {minkowski_grid_path}")
+-    except Exception as e:
+-        print(f"[MinkowskiEngine] Skipping Minkowski voxel grid output: {e}")
+-
+-if __name__ == "__main__":
+-    main()
+\ No newline at end of file
+diff --git a/script/test_hash_grid.sh b/script/test_hash_grid.sh
+deleted file mode 100644
+index 234c10c..0000000
+--- a/script/test_hash_grid.sh
++++ /dev/null
+@@ -1,32 +0,0 @@
+-#!/bin/bash
+-
+-# Default parameters
+-MODEL_PATH="output/unifed_lift/ramen"  # Path to the trained model
+-SOURCE_PATH="data/lerf/ramen"  # Path to source data
+-IMAGES_PATH="images"  # Path to images (relative to SOURCE_PATH)
+-ITERATION=-1  # Use latest iteration
+-CELL_SIZE=0.05  # Size of hash grid cells
+-HASH_SIZE=1048576  # 2^20
+-MAX_POINTS_PER_CELL=32
+-OUTPUT_DIR="output/hash_grid"
+-SAVE_PLY=true
+-TEST_QUERIES=1000
+-EVAL=true  # Evaluation mode
+-N_VIEWS=0  # Use all views
+-TRAIN_SPLIT=0.8
+-
+-# Run hash grid test
+-python script/test_hash_grid.py \
+-    --model_path $MODEL_PATH \
+-    --source_path $SOURCE_PATH \
+-    --images $IMAGES_PATH \
+-    --iteration $ITERATION \
+-    --cell_size $CELL_SIZE \
+-    --hash_size $HASH_SIZE \
+-    --max_points_per_cell $MAX_POINTS_PER_CELL \
+-    --output_dir $OUTPUT_DIR \
+-    --test_queries $TEST_QUERIES \
+-    --n_views $N_VIEWS \
+-    --train_split $TRAIN_SPLIT \
+-    $([ "$EVAL" = true ] && echo "--eval") \
+-    $([ "$SAVE_PLY" = true ] && echo "--save_ply") 
+\ No newline at end of file
+diff --git a/submodules/diff-gaussian-rasterization/diff_gaussian_rasterization.egg-info/PKG-INFO b/submodules/diff-gaussian-rasterization/diff_gaussian_rasterization.egg-info/PKG-INFO
+deleted file mode 100644
+index b471f51..0000000
+--- a/submodules/diff-gaussian-rasterization/diff_gaussian_rasterization.egg-info/PKG-INFO
++++ /dev/null
+@@ -1,4 +0,0 @@
+-Metadata-Version: 2.1
+-Name: diff_gaussian_rasterization
+-Version: 0.0.0
+-License-File: LICENSE.md
+diff --git a/submodules/diff-gaussian-rasterization/diff_gaussian_rasterization.egg-info/SOURCES.txt b/submodules/diff-gaussian-rasterization/diff_gaussian_rasterization.egg-info/SOURCES.txt
+deleted file mode 100644
+index f158df3..0000000
+--- a/submodules/diff-gaussian-rasterization/diff_gaussian_rasterization.egg-info/SOURCES.txt
++++ /dev/null
+@@ -1,13 +0,0 @@
+-LICENSE.md
+-README.md
+-ext.cpp
+-rasterize_points.cu
+-setup.py
+-cuda_rasterizer/backward.cu
+-cuda_rasterizer/forward.cu
+-cuda_rasterizer/rasterizer_impl.cu
+-diff_gaussian_rasterization/__init__.py
+-diff_gaussian_rasterization.egg-info/PKG-INFO
+-diff_gaussian_rasterization.egg-info/SOURCES.txt
+-diff_gaussian_rasterization.egg-info/dependency_links.txt
+-diff_gaussian_rasterization.egg-info/top_level.txt
+\ No newline at end of file
+diff --git a/submodules/diff-gaussian-rasterization/diff_gaussian_rasterization.egg-info/dependency_links.txt b/submodules/diff-gaussian-rasterization/diff_gaussian_rasterization.egg-info/dependency_links.txt
+deleted file mode 100644
+index 8b13789..0000000
+--- a/submodules/diff-gaussian-rasterization/diff_gaussian_rasterization.egg-info/dependency_links.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-
+diff --git a/submodules/diff-gaussian-rasterization/diff_gaussian_rasterization.egg-info/top_level.txt b/submodules/diff-gaussian-rasterization/diff_gaussian_rasterization.egg-info/top_level.txt
+deleted file mode 100644
+index 9dc233f..0000000
+--- a/submodules/diff-gaussian-rasterization/diff_gaussian_rasterization.egg-info/top_level.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-diff_gaussian_rasterization
+diff --git a/train.sh b/train.sh
+index 3843556..6914f13 100644
+--- a/train.sh
++++ b/train.sh
+@@ -2,8 +2,7 @@ mkdir output
+ output_dir="./output/unifed_lift/"
+ mkdir ${output_dir}
+ 
+-#scenes=("figurines" "ramen" "teatime")
+-scenes=("figurines")
++scenes=("figurines" "ramen" "teatime")
+ for index in "${!scenes[@]}"; do
+-    python train_unified_lift.py -s ./data/lerf/${scenes[$index]} -m ${output_dir}/${scenes[$index]}  --iterations 30000 --config_file config/gaussian_dataset/train.json --weight_loss 1e-0 --train_split --use_wandb --checkpoint_iterations 1 10 100 1000 5000 10000 15000 20000 25000 30000
++    python train_unified_lift.py -s ./data/lerf/${scenes[$index]} -m ${output_dir}/${scenes[$index]}   --config_file config/gaussian_dataset/train.json --weight_loss 1e-0 --train_split --use_wandb
+ done
+\ No newline at end of file
+diff --git a/train_geometry.sh b/train_geometry.sh
+new file mode 100755
+index 0000000..8d63872
+--- /dev/null
++++ b/train_geometry.sh
+@@ -0,0 +1,17 @@
++#!/bin/bash
++
++# Create output directory if it doesn't exist
++output_dir="./output/unified_lift"
++mkdir -p "${output_dir}"
++
++# Define your scenes
++scenes=("classroomscene" "officescene")
++
++# Loop over scenes
++for index in "${scenes[@]}"; do
++    echo "Processing scene: $index"
++    python geometry_train.py -s ./data/${index} -m ${output_dir}/${index} \
++    --config_file config/gaussian_dataset/train.json \
++    --resolution 1
++done
++
+diff --git a/train_unified_lift.py b/train_unified_lift.py
+index 3255812..c0096fe 100644
+--- a/train_unified_lift.py
++++ b/train_unified_lift.py
+@@ -497,7 +497,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
+ 
+             if (iteration in checkpoint_iterations):
+                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
+-                torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnts/chkpnt" + str(iteration) + ".pth")
++                torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
+ 
+ def prepare_output_and_logger(args):    
+     if not args.model_path:
+diff --git a/utils/__init__.py b/utils/__init__.py
+deleted file mode 100644
+index 68da436..0000000
+--- a/utils/__init__.py
++++ /dev/null
+@@ -1,3 +0,0 @@
+-"""
+-Utility functions for the Unified-Lift project.
+-""" 
+\ No newline at end of file
+diff --git a/utils/camera_utils.py b/utils/camera_utils.py
+index e12f7c1..2552775 100644
+--- a/utils/camera_utils.py
++++ b/utils/camera_utils.py
+@@ -20,13 +20,10 @@ WARNED = False
+ def loadCam(args, id, cam_info, resolution_scale):
+     orig_w, orig_h = cam_info.image.size
+ 
+-    # Use default resolution if not present
+-    resolution = getattr(args, 'resolution', 1)
+-
+-    if resolution in [1, 2, 4, 8]:
+-        res = round(orig_w/(resolution_scale * resolution)), round(orig_h/(resolution_scale * resolution))
++    if args.resolution in [1, 2, 4, 8]:
++        resolution = round(orig_w/(resolution_scale * args.resolution)), round(orig_h/(resolution_scale * args.resolution))
+     else:  # should be a type that converts to float
+-        if resolution == -1:
++        if args.resolution == -1:
+             if orig_w > 1600:
+                 global WARNED
+                 if not WARNED:
+@@ -37,12 +34,12 @@ def loadCam(args, id, cam_info, resolution_scale):
+             else:
+                 global_down = 1
+         else:
+-            global_down = orig_w / resolution
++            global_down = orig_w / args.resolution
+ 
+         scale = float(global_down) * float(resolution_scale)
+-        res = (int(orig_w / scale), int(orig_h / scale))
++        resolution = (int(orig_w / scale), int(orig_h / scale))
+ 
+-    resized_image_rgb = PILtoTorch(cam_info.image, res)
++    resized_image_rgb = PILtoTorch(cam_info.image, resolution)
+ 
+     gt_image = resized_image_rgb[:3, ...]
+     loaded_mask = None
+@@ -50,18 +47,11 @@ def loadCam(args, id, cam_info, resolution_scale):
+     if resized_image_rgb.shape[1] == 4:
+         loaded_mask = resized_image_rgb[3:4, ...]
+ 
+-    # Handle cam_info.objects robustly
+-    objects_np = np.array(cam_info.objects)
+-    if objects_np.dtype in [np.float64, np.float32, np.float16, np.complex64, np.complex128, np.int64, np.int32, np.int16, np.int8, np.uint64, np.uint32, np.uint16, np.uint8, np.bool_]:
+-        objects_tensor = torch.from_numpy(objects_np)
+-    else:
+-        objects_tensor = cam_info.objects  # leave as list or whatever it is
+-
+     return Camera(colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
+                   FoVx=cam_info.FovX, FoVy=cam_info.FovY, 
+                   image=gt_image, gt_alpha_mask=loaded_mask,
+                   image_name=cam_info.image_name, uid=id, data_device=args.data_device,
+-                  objects=objects_tensor)
++                  objects=None)
+ 
+ def cameraList_from_camInfos(cam_infos, resolution_scale, args):
+     camera_list = []
+diff --git a/utils/hash_grid.py b/utils/hash_grid.py
+deleted file mode 100644
+index 94b8bfb..0000000
+--- a/utils/hash_grid.py
++++ /dev/null
+@@ -1,791 +0,0 @@
+-import torch
+-import numpy as np
+-from typing import Tuple, Optional, List, Dict
+-import open3d as o3d
+-import copy
+-from scipy.spatial import cKDTree
+-
+-class HashGrid:
+-    def __init__(self, 
+-                 min_cell_size: float,
+-                 max_cell_size: float,
+-                 hash_size: int = 2**20,
+-                 max_points_per_cell: int = 32,
+-                 confidence_threshold: float = 0.5,
+-                 curvature_threshold: float = 0.1,
+-                 concentration_weight: float = 0.4,
+-                 density_weight: float = 0.3,
+-                 curvature_weight: float = 0.3):
+-        """
+-        Initialize a sparse hash grid for 3D points with adaptive cell sizing.
+-        
+-        Args:
+-            min_cell_size: Minimum cell size for dense/high-curvature regions
+-            max_cell_size: Maximum cell size for sparse/flat regions
+-            hash_size: Size of the hash table (should be a power of 2)
+-            max_points_per_cell: Maximum number of points to store per cell
+-            confidence_threshold: Minimum confidence score for points (0-1)
+-            curvature_threshold: Threshold for high curvature regions
+-            concentration_weight: Weight for spatial concentration in cell size computation
+-            density_weight: Weight for local density in cell size computation
+-            curvature_weight: Weight for curvature in cell size computation
+-        """
+-        self.min_cell_size = min_cell_size
+-        self.max_cell_size = max_cell_size
+-        self.hash_size = hash_size
+-        self.max_points_per_cell = max_points_per_cell
+-        self.confidence_threshold = confidence_threshold
+-        self.curvature_threshold = curvature_threshold
+-        self.concentration_weight = concentration_weight
+-        self.density_weight = density_weight
+-        self.curvature_weight = curvature_weight
+-        
+-        # Hash table: maps cell coordinates to point indices
+-        self.hash_table = {}
+-        
+-        # Point storage
+-        self.points = None
+-        self.normals = None
+-        self.point_features = None
+-        self.confidence = None
+-        self.curvatures = None
+-        self.cell_sizes = None  # Store adaptive cell sizes for each point
+-        
+-    def compute_local_curvature(self, points: torch.Tensor, normals: torch.Tensor, k: int = 8) -> torch.Tensor:
+-        """Compute local curvature using normal variation."""
+-        # Convert to numpy for KD-tree
+-        points_np = points.detach().cpu().numpy()
+-        normals_np = normals.detach().cpu().numpy()
+-        
+-        # Build KD-tree
+-        tree = cKDTree(points_np)
+-        
+-        # Find k-nearest neighbors for each point
+-        distances, indices = tree.query(points_np, k=k+1)  # +1 because point is its own neighbor
+-        
+-        # Compute curvature as normal variation
+-        curvatures = []
+-        for i in range(len(points)):
+-            neighbor_normals = normals_np[indices[i][1:]]  # Exclude self
+-            center_normal = normals_np[i]
+-            
+-            # Compute angle between center normal and neighbor normals
+-            angles = np.arccos(np.clip(np.dot(neighbor_normals, center_normal), -1.0, 1.0))
+-            curvature = np.mean(angles)
+-            curvatures.append(curvature)
+-            
+-        return torch.tensor(curvatures, device=points.device)
+-    
+-    def compute_local_density(self, points: torch.Tensor, k: int = 8) -> torch.Tensor:
+-        """Compute local point density using k-nearest neighbors."""
+-        # Convert to numpy for KD-tree
+-        points_np = points.detach().cpu().numpy()
+-        
+-        # Build KD-tree
+-        tree = cKDTree(points_np)
+-        
+-        # Find k-nearest neighbors for each point
+-        distances, _ = tree.query(points_np, k=k+1)  # +1 because point is its own neighbor
+-        
+-        # Compute density as inverse of average distance to neighbors
+-        densities = 1.0 / (np.mean(distances[:, 1:], axis=1) + 1e-6)  # Exclude self, add small epsilon
+-        densities = densities / np.max(densities)  # Normalize to [0, 1]
+-        
+-        return torch.tensor(densities, device=points.device)
+-    
+-    def compute_spatial_concentration(self, points: torch.Tensor, k: int = 8) -> torch.Tensor:
+-        """Compute spatial concentration using k-nearest neighbors."""
+-        # Convert to numpy for KD-tree
+-        points_np = points.detach().cpu().numpy()
+-        
+-        # Build KD-tree
+-        tree = cKDTree(points_np)
+-        
+-        # Find k-nearest neighbors for each point
+-        distances, _ = tree.query(points_np, k=k+1)  # +1 because point is its own neighbor
+-        
+-        # Compute concentration as inverse of average distance to neighbors
+-        # Points in dense clusters will have smaller average distances
+-        concentration = 1.0 / (np.mean(distances[:, 1:], axis=1) + 1e-6)  # Exclude self
+-        concentration = concentration / np.max(concentration)  # Normalize to [0, 1]
+-        
+-        return torch.tensor(concentration, device=points.device)
+-    
+-    def compute_adaptive_cell_sizes(self, 
+-                                  points: torch.Tensor, 
+-                                  normals: torch.Tensor,
+-                                  confidence: torch.Tensor) -> torch.Tensor:
+-        """Compute adaptive cell sizes based on concentration, density, and curvature."""
+-        # Compute spatial concentration
+-        concentration = self.compute_spatial_concentration(points)
+-        
+-        # Compute local density
+-        density = self.compute_local_density(points)
+-        
+-        # Compute local curvature
+-        curvature = self.compute_local_curvature(points, normals)
+-        
+-        # Normalize confidence to [0, 1] if not already
+-        if confidence.max() > 1.0:
+-            confidence = confidence / confidence.max()
+-        
+-        # Combine factors to compute cell size
+-        # - High concentration -> smaller cells
+-        # - High density -> smaller cells
+-        # - High curvature -> smaller cells
+-        concentration_factor = 1.0 - concentration
+-        density_factor = 1.0 - density
+-        curvature_factor = 1.0 - (curvature / curvature.max())
+-        
+-        # Weighted combination
+-        combined_factor = (self.concentration_weight * concentration_factor + 
+-                          self.density_weight * density_factor + 
+-                          self.curvature_weight * curvature_factor)
+-        
+-        # Map to cell size range
+-        cell_sizes = (self.max_cell_size * (1.0 - combined_factor) + 
+-                     self.min_cell_size * combined_factor)
+-        
+-        return cell_sizes
+-    
+-    def _get_cell_coords(self, points: torch.Tensor, cell_sizes: Optional[torch.Tensor] = None) -> torch.Tensor:
+-        """Convert 3D points to cell coordinates using adaptive cell sizes."""
+-        if cell_sizes is None:
+-            cell_sizes = torch.ones(len(points), device=points.device) * self.max_cell_size
+-        
+-        # Compute cell coordinates using adaptive cell sizes
+-        cell_coords = torch.floor(points / cell_sizes.unsqueeze(-1)).long()
+-        return cell_coords
+-    
+-    def _hash_cell_coords(self, cell_coords: torch.Tensor) -> torch.Tensor:
+-        """Hash cell coordinates to a 1D index."""
+-        # Use a simple hash function based on prime numbers
+-        p1 = 73856093
+-        p2 = 19349663
+-        p3 = 83492791
+-        
+-        x = cell_coords[:, 0]
+-        y = cell_coords[:, 1]
+-        z = cell_coords[:, 2]
+-        
+-        return ((x * p1) ^ (y * p2) ^ (z * p3)) % self.hash_size
+-    
+-    def _subdivide_voxel(self, points, indices, cell_coord, cell_size, max_points_per_cell, depth=0, max_depth=5):
+-        """
+-        Recursively subdivide a voxel if it contains too many points.
+-        Returns a list of (cell_coord, cell_size, indices) for leaf voxels.
+-        """
+-        if len(indices) <= max_points_per_cell or depth >= max_depth:
+-            return [(cell_coord, cell_size, indices)]
+-        # Subdivide into 8 octants
+-        sub_voxels = []
+-        half = cell_size / 2.0
+-        for dx in [0, 1]:
+-            for dy in [0, 1]:
+-                for dz in [0, 1]:
+-                    offset = np.array([dx, dy, dz]) * half
+-                    new_cell_coord = cell_coord * 2 + np.array([dx, dy, dz])
+-                    new_cell_size = half
+-                    # Find points in this sub-voxel
+-                    min_corner = cell_coord * cell_size + offset
+-                    max_corner = min_corner + half
+-                    mask = np.all((points[indices] >= min_corner) & (points[indices] < max_corner), axis=1)
+-                    sub_indices = [indices[i] for i, m in enumerate(mask) if m]
+-                    if sub_indices:
+-                        sub_voxels.extend(
+-                            self._subdivide_voxel(points, sub_indices, new_cell_coord, new_cell_size, max_points_per_cell, depth+1, max_depth)
+-                        )
+-        return sub_voxels
+-
+-    def _voxel_intersection_volume(self, min1, max1, min2, max2):
+-        """Compute the intersection volume between two axis-aligned boxes."""
+-        overlap = np.maximum(0, np.minimum(max1, max2) - np.maximum(min1, min2))
+-        return np.prod(overlap)
+-
+-    def _resolve_voxel_intersections(self, voxels, points):
+-        """
+-        Given a list of voxels [(cell_coord, cell_size, indices)], resolve intersections:
+-        - If intersection > 80% of the smaller voxel, keep only the one with more points.
+-        - If less, subdivide both voxels further.
+-        """
+-        resolved = []
+-        used = set()
+-        n = len(voxels)
+-        for i in range(n):
+-            if i in used:
+-                continue
+-            cell1, size1, idx1 = voxels[i]
+-            min1 = cell1 * size1
+-            max1 = min1 + size1
+-            keep = True
+-            for j in range(i+1, n):
+-                if j in used:
+-                    continue
+-                cell2, size2, idx2 = voxels[j]
+-                min2 = cell2 * size2
+-                max2 = min2 + size2
+-                inter_vol = self._voxel_intersection_volume(min1, max1, min2, max2)
+-                vol1 = np.prod(max1 - min1)
+-                vol2 = np.prod(max2 - min2)
+-                if inter_vol > 0:
+-                    frac1 = inter_vol / vol1
+-                    frac2 = inter_vol / vol2
+-                    if frac1 > 0.8 or frac2 > 0.8:
+-                        # Remove the one with fewer points
+-                        if len(idx1) >= len(idx2):
+-                            used.add(j)
+-                        else:
+-                            keep = False
+-                            break
+-                    else:
+-                        # Subdivide both, but only if neither is at min size and subdivision is meaningful
+-                        if size1 <= self.min_cell_size or size2 <= self.min_cell_size:
+-                            used.add(j)
+-                            keep = False
+-                            resolved.append((tuple(cell1), size1, tuple(idx1)))
+-                            resolved.append((tuple(cell2), size2, tuple(idx2)))
+-                            break
+-                        # Subdivide both
+-                        sub1 = self._subdivide_voxel(points, idx1, cell1, size1, self.max_points_per_cell)
+-                        sub2 = self._subdivide_voxel(points, idx2, cell2, size2, self.max_points_per_cell)
+-                        sub1_points = sum(len(s[2]) for s in sub1)
+-                        sub2_points = sum(len(s[2]) for s in sub2)
+-                        if (len(sub1) == 1 and sub1[0][1] == size1) or (len(sub2) == 1 and sub2[0][1] == size2):
+-                            used.add(j)
+-                            keep = False
+-                            resolved.append((tuple(cell1), size1, tuple(idx1)))
+-                            resolved.append((tuple(cell2), size2, tuple(idx2)))
+-                            break
+-                        if sub1_points == len(idx1) and sub2_points == len(idx2):
+-                            used.add(j)
+-                            keep = False
+-                            resolved.append((tuple(cell1), size1, tuple(idx1)))
+-                            resolved.append((tuple(cell2), size2, tuple(idx2)))
+-                            break
+-                        used.add(j)
+-                        resolved.extend(self._resolve_voxel_intersections(sub1 + sub2, points))
+-                        keep = False
+-                        break
+-            if keep and (tuple(cell1), size1, tuple(idx1)) not in resolved:
+-                resolved.append((tuple(cell1), size1, tuple(idx1)))
+-        return resolved
+-
+-    def build(self, 
+-             points: torch.Tensor,
+-             normals: Optional[torch.Tensor] = None,
+-             point_features: Optional[torch.Tensor] = None,
+-             confidence: Optional[torch.Tensor] = None):
+-        """
+-        Build the adaptive hash grid from input points.
+-        
+-        Args:
+-            points: Input points (N, 3)
+-            normals: Point normals (N, 3)
+-            point_features: Additional point features (N, F)
+-            confidence: Point confidence scores (N,) between 0 and 1
+-        """
+-        self.points = points
+-        self.normals = normals
+-        self.point_features = point_features
+-        if confidence is None:
+-            confidence = torch.ones(len(points), device=points.device)
+-        self.confidence = confidence
+-        mask = confidence > self.confidence_threshold
+-        filtered_points = points[mask]
+-        filtered_normals = normals[mask] if normals is not None else None
+-        filtered_confidence = confidence[mask]
+-        self.cell_sizes = self.compute_adaptive_cell_sizes(
+-            filtered_points, 
+-            filtered_normals if filtered_normals is not None else torch.zeros_like(filtered_points),
+-            filtered_confidence
+-        )
+-        # Get cell coordinates using adaptive cell sizes
+-        cell_coords = self._get_cell_coords(filtered_points, self.cell_sizes)
+-        cell_hashes = self._hash_cell_coords(cell_coords)
+-        # Build initial hash table
+-        initial_hash_table = {}
+-        for i, cell_hash in enumerate(cell_hashes):
+-            cell_hash = cell_hash.item()
+-            if cell_hash not in initial_hash_table:
+-                initial_hash_table[cell_hash] = []
+-            initial_hash_table[cell_hash].append(i)
+-        # Subdivide voxels that are too dense
+-        self.hash_table.clear()
+-        all_voxels = []
+-        for cell_hash, idx_list in initial_hash_table.items():
+-            if len(idx_list) > self.max_points_per_cell:
+-                cell_coord = cell_coords[idx_list[0]].cpu().numpy()
+-                cell_size = self.cell_sizes[idx_list[0]].item()
+-                leaf_voxels = self._subdivide_voxel(filtered_points.detach().cpu().numpy(), idx_list, cell_coord, cell_size, self.max_points_per_cell)
+-                all_voxels.extend(leaf_voxels)
+-            else:
+-                cell_coord = cell_coords[idx_list[0]].cpu().numpy()
+-                cell_size = self.cell_sizes[idx_list[0]].item()
+-                all_voxels.append((cell_coord, cell_size, idx_list))
+-        # Resolve intersections
+-        all_voxels = self._resolve_voxel_intersections(all_voxels, filtered_points.detach().cpu().numpy())
+-        for cell_coord, cell_size, idx_list in all_voxels:
+-            leaf_hash = self._hash_cell_coords(torch.tensor([cell_coord])).item()
+-            self.hash_table[leaf_hash] = idx_list
+-        # --- Filter out voxels with fewer than the average number of points ---
+-        # Count points per voxel
+-        voxel_point_counts = {h: len(idx_list) for h, idx_list in self.hash_table.items()}
+-        if len(voxel_point_counts) > 0:
+-            avg_points_per_voxel = sum(voxel_point_counts.values()) / len(voxel_point_counts)
+-            # Remove voxels with fewer than the average number of points
+-            self.hash_table = {h: idx_list for h, idx_list in self.hash_table.items() if len(idx_list) >= avg_points_per_voxel}
+-            print(f"Filtered voxels: {len(self.hash_table)} remain with >= average ({avg_points_per_voxel:.1f}) points per voxel.")
+-
+-        # Store filtered points and attributes
+-        self.points = filtered_points
+-        self.normals = filtered_normals
+-        self.confidence = filtered_confidence
+-        
+-        # Print statistics
+-        print("\nAdaptive Hash Grid Statistics:")
+-        print(f"Total points: {len(points)}")
+-        print(f"Filtered points: {len(filtered_points)}")
+-        print(f"Number of cells: {len(self.hash_table)}")
+-        print(f"Average cell size: {self.cell_sizes.mean().item():.3f}")
+-        print(f"Min cell size: {self.cell_sizes.min().item():.3f}")
+-        print(f"Max cell size: {self.cell_sizes.max().item():.3f}")
+-    
+-    def query_points(self, 
+-                    query_points: torch.Tensor,
+-                    k: int = 8,
+-                    radius: Optional[float] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+-        """
+-        Query k nearest neighbors for each query point.
+-        
+-        Args:
+-            query_points: Query points (M, 3)
+-            k: Number of neighbors to find
+-            radius: Optional maximum search radius
+-            
+-        Returns:
+-            Tuple of (indices, distances) for each query point
+-        """
+-        if self.points is None or len(self.points) == 0:
+-            raise RuntimeError("Hash grid not built or empty. Call build() first.")
+-        
+-        if len(query_points) == 0:
+-            return torch.zeros((0, k), dtype=torch.long, device=query_points.device), \
+-                   torch.zeros((0, k), dtype=torch.float, device=query_points.device)
+-        
+-        # Get cell coordinates for query points
+-        query_cell_coords = self._get_cell_coords(query_points)
+-        query_cell_hashes = self._hash_cell_coords(query_cell_coords)
+-        
+-        # Pre-allocate tensors for results
+-        all_indices = torch.full((len(query_points), k), -1, dtype=torch.long, device=query_points.device)
+-        all_distances = torch.full((len(query_points), k), float('inf'), dtype=torch.float, device=query_points.device)
+-        
+-        # Process queries in batches to manage memory
+-        batch_size = 100  # Adjust based on available memory
+-        for batch_start in range(0, len(query_points), batch_size):
+-            batch_end = min(batch_start + batch_size, len(query_points))
+-            batch_points = query_points[batch_start:batch_end]
+-            batch_cell_coords = query_cell_coords[batch_start:batch_end]
+-            batch_cell_hashes = query_cell_hashes[batch_start:batch_end]
+-            
+-            for i, (query_point, cell_hash) in enumerate(zip(batch_points, batch_cell_hashes)):
+-                try:
+-                    # Get points from the same cell
+-                    cell_hash = cell_hash.item()
+-                    neighbor_indices = set(self.hash_table.get(cell_hash, []))
+-                    
+-                    # Get points from neighboring cells (only if needed)
+-                    if len(neighbor_indices) < k:
+-                        cell_coord = batch_cell_coords[i]
+-                        # Check neighboring cells in order of increasing distance
+-                        for dx in [-1, 0, 1]:
+-                            for dy in [-1, 0, 1]:
+-                                for dz in [-1, 0, 1]:
+-                                    if dx == dy == dz == 0:
+-                                        continue
+-                                    neighbor_cell = cell_coord + torch.tensor([dx, dy, dz], device=cell_coord.device)
+-                                    neighbor_hash = self._hash_cell_coords(neighbor_cell.unsqueeze(0))[0].item()
+-                                    neighbor_indices.update(self.hash_table.get(neighbor_hash, []))
+-                    
+-                    if not neighbor_indices:
+-                        continue
+-                    
+-                    # Convert to list and compute distances
+-                    neighbor_indices = list(neighbor_indices)
+-                    neighbor_points = self.points[neighbor_indices]
+-                    distances = torch.norm(neighbor_points - query_point, dim=1)
+-                    
+-                    # Apply radius filter if specified
+-                    if radius is not None:
+-                        mask = distances <= radius
+-                        neighbor_indices = [idx for j, idx in enumerate(neighbor_indices) if mask[j]]
+-                        distances = distances[mask]
+-                    
+-                    if not neighbor_indices:
+-                        continue
+-                    
+-                    # Get k nearest neighbors
+-                    if len(neighbor_indices) > k:
+-                        k_indices = torch.topk(distances, k, largest=False)[1]
+-                        neighbor_indices = [neighbor_indices[idx] for idx in k_indices]
+-                        distances = distances[k_indices]
+-                    else:
+-                        # Pad with -1 if not enough neighbors
+-                        pad_size = k - len(neighbor_indices)
+-                        neighbor_indices.extend([-1] * pad_size)
+-                        distances = torch.cat([distances, torch.full((pad_size,), float('inf'), device=distances.device)])
+-                    
+-                    # Store results
+-                    all_indices[batch_start + i] = torch.tensor(neighbor_indices, device=query_points.device)
+-                    all_distances[batch_start + i] = distances
+-                    
+-                except Exception as e:
+-                    print(f"Warning: Error processing query point {batch_start + i}: {str(e)}")
+-                    continue
+-        
+-        return all_indices, all_distances
+-    
+-    def get_cell_points(self, cell_coord: torch.Tensor) -> List[int]:
+-        """Get all point indices in a specific cell."""
+-        cell_hash = self._hash_cell_coords(cell_coord.unsqueeze(0))[0].item()
+-        return self.hash_table.get(cell_hash, [])
+-    
+-    def visualize_points(self, save_path: str):
+-        """Visualize only the points using Open3D."""
+-        if self.points is None:
+-            raise RuntimeError("Hash grid not built. Call build() first.")
+-        
+-        # Create point cloud
+-        pcd = o3d.geometry.PointCloud()
+-        pcd.points = o3d.utility.Vector3dVector(self.points.detach().cpu().numpy())
+-        
+-        if self.normals is not None:
+-            pcd.normals = o3d.utility.Vector3dVector(self.normals.detach().cpu().numpy())
+-        
+-        # Set points to white
+-        pcd.colors = o3d.utility.Vector3dVector(np.ones((len(self.points), 3)) * [1, 1, 1])
+-        
+-        # Save point cloud
+-        o3d.io.write_point_cloud(save_path, pcd)
+-        print(f"Saved point cloud to {save_path}")
+-    
+-    def visualize_grid(self, save_path=None):
+-        """Visualize the hash grid as wireframe cubes for non-empty voxels."""
+-        if self.points is None:
+-            raise RuntimeError("Hash grid not built. Call build() first.")
+-        
+-        # Detect if this is a regular (structured) grid
+-        is_structured = self.normals is None and self.cell_sizes is not None and torch.allclose(self.cell_sizes, self.cell_sizes[0])
+-        grid_color = [0.2, 0.2, 0.8] if is_structured else [0.8, 0.2, 0.2]
+-        vertices = []
+-        triangles = []
+-        vertex_colors = []
+-        
+-        if is_structured:
+-            # For regular grid, visualize all voxels in self.hash_table
+-            cell_size = self.cell_sizes[0].item()
+-            # To reconstruct cell coordinates, store them in hash_table as (cell_coord, idx_list)
+-            # We'll need to update build_structured_grid to store cell_coord as well
+-            for cell_hash, idx_list in self.hash_table.items():
+-                # Try to recover cell_coord from one of the points in idx_list
+-                if len(idx_list) == 0:
+-                    continue
+-                pt = self.points[idx_list[0]]
+-                # Recompute cell_coord
+-                min_corner = self.points.min(dim=0)[0]
+-                cell_coord = torch.floor((pt - min_corner) / cell_size).long()
+-                # Get cell corners
+-                corners = []
+-                for dx in [0, 1]:
+-                    for dy in [0, 1]:
+-                        for dz in [0, 1]:
+-                            corner = (cell_coord + torch.tensor([dx, dy, dz], device=self.points.device)) * cell_size + min_corner
+-                            corners.append(corner.detach().cpu().numpy())
+-                # Define edges of the cube (12 edges)
+-                edges = [
+-                    (0, 1), (0, 2), (0, 4),  # Front face
+-                    (1, 3), (1, 5),          # Right face
+-                    (2, 3), (2, 6),          # Back face
+-                    (3, 7),                  # Top face
+-                    (4, 5), (4, 6),          # Bottom face
+-                    (5, 7), (6, 7)           # Left face
+-                ]
+-                for edge in edges:
+-                    start = corners[edge[0]]
+-                    end = corners[edge[1]]
+-                    cylinder = o3d.geometry.TriangleMesh.create_cylinder(radius=0.005, height=1.0)
+-                    direction = end - start
+-                    length = np.linalg.norm(direction)
+-                    if length > 0:
+-                        direction = direction / length
+-                        z_axis = np.array([0, 0, 1])
+-                        rotation_axis = np.cross(z_axis, direction)
+-                        if np.linalg.norm(rotation_axis) > 0:
+-                            rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
+-                            rotation_angle = np.arccos(np.dot(z_axis, direction))
+-                            rotation_matrix = o3d.geometry.get_rotation_matrix_from_axis_angle(rotation_axis * rotation_angle)
+-                            cylinder.rotate(rotation_matrix, center=[0, 0, 0])
+-                        cylinder.scale(length, center=[0, 0, 0])
+-                        cylinder.translate((start + end) / 2)
+-                        vertices.extend(np.asarray(cylinder.vertices))
+-                        triangles.extend(np.asarray(cylinder.triangles) + len(vertices) - len(cylinder.vertices))
+-                        vertex_colors.extend(np.ones((len(cylinder.vertices), 3)) * grid_color)
+-        else:
+-            # Get cell coordinates for all points
+-            cell_coords = self._get_cell_coords(self.points, self.cell_sizes)
+-            cell_hashes = self._hash_cell_coords(cell_coords)
+-            occupied_cells = {}
+-            for i, (cell_coord, cell_hash) in enumerate(zip(cell_coords, cell_hashes)):
+-                if cell_hash.item() in self.hash_table:
+-                    cell_key = tuple(cell_coord.cpu().numpy())
+-                    if cell_key not in occupied_cells:
+-                        occupied_cells[cell_key] = {"sizes": [], "count": 0}
+-                    occupied_cells[cell_key]["sizes"].append(self.cell_sizes[i].item())
+-                    occupied_cells[cell_key]["count"] += 1
+-            # Compute statistics
+-            point_counts = [cell_info["count"] for cell_info in occupied_cells.values()]
+-            if not point_counts:
+-                print("No voxels to visualize!")
+-                return
+-            min_points = min(point_counts)
+-            max_points = max(point_counts)
+-            avg_points = sum(point_counts) / len(point_counts)
+-            
+-            # Compute average cell size for each occupied cell
+-            for cell_key in occupied_cells:
+-                occupied_cells[cell_key]["avg_size"] = sum(occupied_cells[cell_key]["sizes"]) / len(occupied_cells[cell_key]["sizes"])
+-            
+-            num_voxels = len(occupied_cells)
+-            print("\nVoxel Grid Statistics:")
+-            print(f"Total number of voxels: {num_voxels}")
+-            print(f"Average cell size: {sum(cell['avg_size'] for cell in occupied_cells.values()) / num_voxels:.3f}")
+-            print(f"Total number of points: {len(self.points)}")
+-            print(f"Points per voxel:")
+-            print(f"  Minimum: {min_points}")
+-            print(f"  Maximum: {max_points}")
+-            print(f"  Average: {avg_points:.1f}")
+-            
+-            # Create wireframe visualization with thinner lines
+-            for cell_key in occupied_cells:
+-                cell_coord = torch.tensor(cell_key, device=self.points.device)
+-                cell_size = sum(occupied_cells[cell_key]["sizes"]) / len(occupied_cells[cell_key]["sizes"])
+-                corners = []
+-                for dx in [0, 1]:
+-                    for dy in [0, 1]:
+-                        for dz in [0, 1]:
+-                            corner = (cell_coord + torch.tensor([dx, dy, dz], device=self.points.device)) * cell_size
+-                            corners.append(corner.detach().cpu().numpy())
+-                edges = [
+-                    (0, 1), (0, 2), (0, 4),
+-                    (1, 3), (1, 5),
+-                    (2, 3), (2, 6),
+-                    (3, 7),
+-                    (4, 5), (4, 6),
+-                    (5, 7), (6, 7)
+-                ]
+-                for edge in edges:
+-                    start = corners[edge[0]]
+-                    end = corners[edge[1]]
+-                    cylinder = o3d.geometry.TriangleMesh.create_cylinder(radius=0.005, height=1.0)
+-                    direction = end - start
+-                    length = np.linalg.norm(direction)
+-                    if length > 0:
+-                        direction = direction / length
+-                        z_axis = np.array([0, 0, 1])
+-                        rotation_axis = np.cross(z_axis, direction)
+-                        if np.linalg.norm(rotation_axis) > 0:
+-                            rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
+-                            rotation_angle = np.arccos(np.dot(z_axis, direction))
+-                            rotation_matrix = o3d.geometry.get_rotation_matrix_from_axis_angle(rotation_axis * rotation_angle)
+-                            cylinder.rotate(rotation_matrix, center=[0, 0, 0])
+-                        cylinder.scale(length, center=[0, 0, 0])
+-                        cylinder.translate((start + end) / 2)
+-                        vertices.extend(np.asarray(cylinder.vertices))
+-                        triangles.extend(np.asarray(cylinder.triangles) + len(vertices) - len(cylinder.vertices))
+-                        vertex_colors.extend(np.ones((len(cylinder.vertices), 3)) * grid_color)
+-        if len(vertices) == 0:
+-            print("No voxels to visualize!")
+-            return
+-        mesh = o3d.geometry.TriangleMesh()
+-        mesh.vertices = o3d.utility.Vector3dVector(np.array(vertices))
+-        mesh.triangles = o3d.utility.Vector3iVector(np.array(triangles))
+-        mesh.vertex_colors = o3d.utility.Vector3dVector(np.array(vertex_colors))
+-        if save_path is not None:
+-            print(f"Saving grid visualization to {save_path}")
+-            print(f"Number of voxels (cells) being saved: {len(self.hash_table)}")
+-            o3d.io.write_triangle_mesh(save_path, mesh)
+-        else:
+-            vis = o3d.visualization.Visualizer()
+-            vis.create_window()
+-            vis.add_geometry(mesh)
+-            ctr = vis.get_view_control()
+-            ctr.set_zoom(0.8)
+-            vis.run()
+-            vis.destroy_window()
+-    
+-    def visualize(self, save_path: Optional[str] = None):
+-        """Visualize both points and grid using Open3D."""
+-        if save_path is not None:
+-            self.visualize_points(save_path + "_points.ply")
+-            self.visualize_grid(save_path + "_grid.ply")
+-        else:
+-            # For interactive visualization, we need both
+-            pcd = o3d.geometry.PointCloud()
+-            pcd.points = o3d.utility.Vector3dVector(self.points.detach().cpu().numpy())
+-            if self.normals is not None:
+-                pcd.normals = o3d.utility.Vector3dVector(self.normals.detach().cpu().numpy())
+-            
+-            # Set points to white
+-            pcd.colors = o3d.utility.Vector3dVector(np.ones((len(self.points), 3)) * [1, 1, 1])
+-            
+-            # Get grid visualization
+-            cell_coords = self._get_cell_coords(self.points)
+-            occupied_cells = set()
+-            for i, cell_hash in enumerate(self._hash_cell_coords(cell_coords)):
+-                if cell_hash.item() in self.hash_table:
+-                    occupied_cells.add(tuple(cell_coords[i].cpu().numpy()))
+-            
+-            grid_lines = []
+-            grid_points = []
+-            
+-            for cell_coord in occupied_cells:
+-                cell_coord = torch.tensor(cell_coord, device=self.points.device)
+-                corners = []
+-                for dx in [0, 1]:
+-                    for dy in [0, 1]:
+-                        for dz in [0, 1]:
+-                            corner = (cell_coord + torch.tensor([dx, dy, dz], device=self.points.device)) * self.cell_sizes[cell_coord[0], cell_coord[1], cell_coord[2]].item()
+-                            corners.append(corner.detach().cpu().numpy())
+-                            grid_points.append(corner.detach().cpu().numpy())
+-                
+-                edges = [
+-                    (0, 1), (0, 2), (0, 4),
+-                    (1, 3), (1, 5),
+-                    (2, 3), (2, 6),
+-                    (3, 7),
+-                    (4, 5), (4, 6),
+-                    (5, 7),
+-                    (6, 7)
+-                ]
+-                
+-                for edge in edges:
+-                    grid_lines.append([len(grid_points) - 8 + edge[0], len(grid_points) - 8 + edge[1]])
+-            
+-            line_set = o3d.geometry.LineSet()
+-            line_set.points = o3d.utility.Vector3dVector(np.array(grid_points))
+-            line_set.lines = o3d.utility.Vector2iVector(np.array(grid_lines))
+-            
+-            # Set grid lines to red
+-            line_set.colors = o3d.utility.Vector3dVector(np.ones((len(grid_lines), 3)) * [1, 0, 0])
+-            
+-            o3d.visualization.draw_geometries([pcd, line_set])
+-    
+-    def build_structured_grid(self, 
+-                            points: torch.Tensor,
+-                            cell_size: Optional[float] = None,
+-                            confidence: Optional[torch.Tensor] = None,
+-                            target_voxel_count: int = 50000):
+-        """
+-        Build a regular voxel grid around the geometry, keeping only the top N densest voxels.
+-        Args:
+-            points: Input points (N, 3)
+-            cell_size: Size of each voxel (if None, use self.min_cell_size)
+-            confidence: Optional confidence mask
+-            target_voxel_count: Number of voxels to keep (by density)
+-        """
+-        if confidence is None:
+-            confidence = torch.ones(len(points), device=points.device)
+-        mask = confidence > self.confidence_threshold
+-        filtered_points = points[mask]
+-        if cell_size is None:
+-            cell_size = self.min_cell_size
+-        # Compute bounding box
+-        min_corner = filtered_points.min(dim=0)[0]
+-        max_corner = filtered_points.max(dim=0)[0]
+-        grid_shape = torch.ceil((max_corner - min_corner) / cell_size).long()
+-        # Assign points to voxel indices
+-        voxel_indices = torch.floor((filtered_points - min_corner) / cell_size).long()
+-        # Map voxel index tuple to list of point indices
+-        from collections import defaultdict
+-        voxel_dict = defaultdict(list)
+-        for i, idx in enumerate(voxel_indices):
+-            voxel_key = tuple(idx.cpu().numpy())
+-            voxel_dict[voxel_key].append(i)
+-        # Compute average points per voxel
+-        point_counts = [len(v) for v in voxel_dict.values()]
+-        if len(point_counts) == 0:
+-            avg_points = 0
+-        else:
+-            avg_points = sum(point_counts) / len(point_counts)
+-        # Keep only the top N densest voxels
+-        sorted_voxels = sorted(voxel_dict.items(), key=lambda x: len(x[1]), reverse=True)
+-        self.hash_table = {}
+-        for voxel_key, idx_list in sorted_voxels[:target_voxel_count]:
+-            cell_coord = torch.tensor(voxel_key)
+-            cell_hash = self._hash_cell_coords(cell_coord.unsqueeze(0))[0].item()
+-            self.hash_table[cell_hash] = idx_list
+-        # Store filtered points
+-        self.points = filtered_points
+-        self.normals = None
+-        self.point_features = None
+-        self.confidence = confidence[mask]
+-        self.cell_sizes = torch.ones(len(filtered_points), device=points.device) * cell_size
+-        print(f"Structured grid: {len(self.hash_table)} voxels (top {target_voxel_count} densest).")
+-        print(f"Grid cell size: {cell_size:.3f}")
+-        print(f"Bounding box: min {min_corner.detach().cpu().numpy()}, max {max_corner.detach().cpu().numpy()}")
+-try:
+-    import MinkowskiEngine as ME
+-except ImportError:
+-    ME = None
+-    print("Warning: MinkowskiEngine is not installed. MinkowskiVoxelGrid will not be available.")
+-
+-class MinkowskiVoxelGrid:
+-    def __init__(self, xyz: torch.Tensor, colors: Optional[torch.Tensor] = None, voxel_size: float = 0.05, device: str = 'cpu'):
+-        """
+-        Initialize a sparse voxel grid using MinkowskiEngine.
+-        Args:
+-            xyz: (N, 3) tensor of Gaussian centers (float, continuous coordinates)
+-            colors: (N, 3) tensor of RGB colors (optional, for features)
+-            voxel_size: Size of each voxel
+-            device: Device for the sparse tensor
+-        """
+-        if ME is None:
+-            raise ImportError("MinkowskiEngine is not installed.")
+-        self.voxel_size = voxel_size
+-        self.device = device
+-        # Quantize coordinates to voxel indices
+-        coords = torch.floor(xyz / voxel_size).int()
+-        feats = None
+-        if colors is not None:
+-            feats = colors.float()
+-        else:
+-            feats = torch.ones((xyz.shape[0], 1), dtype=torch.float32)  # dummy feature
+-        # Create sparse tensor
+-        self.sparse_tensor = ME.SparseTensor(
+-            features=feats.to(device),
+-            coordinates=coords.to(device)
+-        )
+-        self.coords = coords
+-        self.features = feats
+-
+-    def to(self, device):
+-        self.sparse_tensor = self.sparse_tensor.to(device)
+-        self.coords = self.coords.to(device)
+-        self.features = self.features.to(device)
+-        self.device = device
+-        return self
+-
+-    def __len__(self):
+-        return self.sparse_tensor.C.shape[0]
+-
+-    def get_voxel_centers(self):
+-        # Always use the last 3 columns for (x, y, z) coordinates
+-        return (self.sparse_tensor.C[:, -3:].float() + 0.5) * self.voxel_size
+-
+-    def get_features(self):
+-        return self.sparse_tensor.F
+-
+-    def debug_print(self):
+-        print(f"Minkowski Voxel Grid: {len(self)} voxels, voxel size {self.voxel_size}")
+-        print(f"Voxel centers (first 5): {self.get_voxel_centers()[:5]}")
+-        print(f"Features (first 5): {self.get_features()[:5]}")
+\ No newline at end of file
+diff --git a/utils/standalone_minkowski.py b/utils/standalone_minkowski.py
+deleted file mode 100644
+index 47467f8..0000000
+--- a/utils/standalone_minkowski.py
++++ /dev/null
+@@ -1,16 +0,0 @@
+-import torch
+-import numpy as np
+-
+-class StandaloneMinkowskiVoxelGrid:
+-    def __init__(self, points, colors, voxel_size, device):
+-        from utils.hash_grid import MinkowskiVoxelGrid
+-        self.grid = MinkowskiVoxelGrid(points, colors=colors, voxel_size=voxel_size, device=device)
+-
+-    def get_voxel_centers(self):
+-        return self.grid.get_voxel_centers()
+-
+-    def get_features(self):
+-        return self.grid.get_features()
+-
+-    def __len__(self):
+-        return len(self.grid)
+diff --git a/utils/surface_detection.py b/utils/surface_detection.py
+deleted file mode 100644
+index 00286f0..0000000
+--- a/utils/surface_detection.py
++++ /dev/null
+@@ -1,257 +0,0 @@
+-import torch
+-import numpy as np
+-from scipy.spatial import KDTree
+-from typing import Tuple, Optional
+-import open3d as o3d
+-from sklearn.cluster import DBSCAN
+-
+-class SurfaceDetector:
+-    def __init__(self, 
+-                 opacity_threshold: float = 0.8,
+-                 scale_threshold: float = 0.1,
+-                 density_threshold: float = 0.1,
+-                 k_neighbors: int = 16,
+-                 spatial_concentration_threshold: float = 0.3,
+-                 min_cluster_size: int = 100):
+-        """
+-        Initialize the surface detector.
+-        
+-        Args:
+-            opacity_threshold: Minimum opacity for a Gaussian to be considered
+-            scale_threshold: Maximum scale for a Gaussian to be considered (relative to scene extent)
+-            density_threshold: Minimum local density for a point to be considered part of the surface
+-            k_neighbors: Number of neighbors to consider for density estimation
+-            spatial_concentration_threshold: Threshold for spatial concentration (0-1)
+-            min_cluster_size: Minimum number of points in a cluster to be considered valid
+-        """
+-        self.opacity_threshold = opacity_threshold
+-        self.scale_threshold = scale_threshold
+-        self.density_threshold = density_threshold
+-        self.k_neighbors = k_neighbors
+-        self.spatial_concentration_threshold = spatial_concentration_threshold
+-        self.min_cluster_size = min_cluster_size
+-
+-    def filter_gaussians(self, 
+-                        xyz: torch.Tensor,
+-                        opacity: torch.Tensor,
+-                        scaling: torch.Tensor,
+-                        scene_extent: float) -> torch.Tensor:
+-        """
+-        Filter Gaussians based on opacity and scale.
+-        
+-        Args:
+-            xyz: Gaussian positions (N, 3)
+-            opacity: Gaussian opacities (N, 1)
+-            scaling: Gaussian scales (N, 3)
+-            scene_extent: Scene extent for scale normalization
+-            
+-        Returns:
+-            Boolean mask of valid Gaussians
+-        """
+-        # Filter by opacity
+-        opacity_mask = opacity.squeeze() > self.opacity_threshold
+-        
+-        # Filter by scale (relative to scene extent)
+-        max_scales = torch.max(scaling, dim=1).values
+-        scale_mask = max_scales < (self.scale_threshold * scene_extent)
+-        
+-        # Combine masks
+-        valid_mask = torch.logical_and(opacity_mask, scale_mask)
+-        
+-        return valid_mask
+-
+-    def compute_local_density(self, 
+-                            xyz: torch.Tensor,
+-                            valid_mask: torch.Tensor) -> torch.Tensor:
+-        """
+-        Compute local density for each point using k-nearest neighbors.
+-        
+-        Args:
+-            xyz: Gaussian positions (N, 3)
+-            valid_mask: Boolean mask of valid Gaussians
+-            
+-        Returns:
+-            Local density values for each point
+-        """
+-        # Convert to numpy for KDTree
+-        valid_xyz = xyz[valid_mask].detach().cpu().numpy()
+-        
+-        # Build KDTree
+-        tree = KDTree(valid_xyz)
+-        
+-        # Query k-nearest neighbors
+-        distances, _ = tree.query(valid_xyz, k=self.k_neighbors + 1)  # +1 because point is its own neighbor
+-        
+-        # Compute local density as inverse of mean distance to k-nearest neighbors
+-        # Exclude self-distance (first column)
+-        local_density = 1.0 / (distances[:, 1:].mean(axis=1) + 1e-6)
+-        
+-        # Convert back to tensor
+-        density = torch.zeros(xyz.shape[0], device=xyz.device)
+-        density[valid_mask] = torch.from_numpy(local_density.astype(np.float32)).to(xyz.device)
+-        
+-        return density
+-
+-    def compute_spatial_concentration(self, xyz: torch.Tensor) -> torch.Tensor:
+-        """
+-        Compute spatial concentration score for each point.
+-        Points in dense clusters get higher scores, isolated points get lower scores.
+-        """
+-        # Convert to numpy for DBSCAN
+-        points_np = xyz.detach().cpu().numpy()
+-        
+-        # Compute pairwise distances
+-        clustering = DBSCAN(eps=self.scale_threshold * 2, min_samples=5).fit(points_np)
+-        labels = clustering.labels_
+-        
+-        # Count points in each cluster
+-        unique_labels, counts = np.unique(labels, return_counts=True)
+-        cluster_sizes = dict(zip(unique_labels, counts))
+-        
+-        # Assign concentration scores based on cluster size
+-        concentration = torch.zeros(len(points_np), device=xyz.device)
+-        for i, label in enumerate(labels):
+-            if label != -1:  # Not noise
+-                size = cluster_sizes[label]
+-                concentration[i] = min(1.0, size / self.min_cluster_size)
+-        
+-        return concentration
+-
+-    def filter_background_points(self, 
+-                               xyz: torch.Tensor,
+-                               opacity: torch.Tensor,
+-                               scaling: torch.Tensor,
+-                               scene_extent: float) -> torch.Tensor:
+-        """
+-        Filter out background points by analyzing spatial distribution and density.
+-        
+-        Args:
+-            xyz: Gaussian positions (N, 3)
+-            opacity: Gaussian opacities (N, 1)
+-            scaling: Gaussian scales (N, 3)
+-            scene_extent: Scene extent for scale normalization
+-            
+-        Returns:
+-            Boolean mask of points to keep (True for foreground points)
+-        """
+-        # Basic filtering by opacity and scale
+-        valid_mask = self.filter_gaussians(xyz, opacity, scaling, scene_extent)
+-        
+-        # Compute local density
+-        density = self.compute_local_density(xyz, valid_mask)
+-        
+-        # Compute spatial concentration
+-        concentration = self.compute_spatial_concentration(xyz)
+-        
+-        # Combine masks
+-        density_mask = density > self.density_threshold
+-        concentration_mask = concentration > self.spatial_concentration_threshold
+-        
+-        # Points must satisfy all criteria
+-        foreground_mask = torch.logical_and(valid_mask, density_mask)
+-        foreground_mask = torch.logical_and(foreground_mask, concentration_mask)
+-        
+-        return foreground_mask
+-
+-    def extract_surface_points(self,
+-                             xyz: torch.Tensor,
+-                             opacity: torch.Tensor,
+-                             scaling: torch.Tensor,
+-                             scene_extent: float) -> Tuple[torch.Tensor, torch.Tensor]:
+-        """
+-        Extract surface points from Gaussians, focusing on concentrated geometry.
+-        
+-        Args:
+-            xyz: Gaussian positions (N, 3)
+-            opacity: Gaussian opacities (N, 1)
+-            scaling: Gaussian scales (N, 3)
+-            scene_extent: Scene extent for scale normalization
+-            
+-        Returns:
+-            Tuple of (surface_points, surface_normals)
+-        """
+-        # Filter out background points
+-        foreground_mask = self.filter_background_points(xyz, opacity, scaling, scene_extent)
+-        
+-        # Get foreground points
+-        foreground_points = xyz[foreground_mask]
+-        
+-        # Compute local density for remaining points
+-        density = self.compute_local_density(foreground_points, torch.ones(len(foreground_points), dtype=torch.bool, device=xyz.device))
+-        
+-        # Filter by density
+-        density_mask = density > self.density_threshold
+-        surface_mask = density_mask
+-        
+-        # Get surface points
+-        surface_points = foreground_points[surface_mask]
+-        
+-        # Estimate normals using PCA on local neighborhood
+-        surface_normals = self.estimate_normals(surface_points)
+-        
+-        print(f"\nSurface Detection Statistics:")
+-        print(f"Total points: {len(xyz)}")
+-        print(f"Foreground points: {len(foreground_points)}")
+-        print(f"Surface points: {len(surface_points)}")
+-        
+-        return surface_points, surface_normals
+-
+-    def estimate_normals(self, points: torch.Tensor) -> torch.Tensor:
+-        """
+-        Estimate surface normals using PCA on local neighborhood.
+-        
+-        Args:
+-            points: Surface points (N, 3)
+-            
+-        Returns:
+-            Estimated normals (N, 3)
+-        """
+-        # Convert to numpy for Open3D
+-        points_np = points.detach().cpu().numpy()
+-        
+-        # Create Open3D point cloud
+-        pcd = o3d.geometry.PointCloud()
+-        pcd.points = o3d.utility.Vector3dVector(points_np)
+-        
+-        # Estimate normals
+-        pcd.estimate_normals(
+-            search_param=o3d.geometry.KDTreeSearchParamHybrid(
+-                radius=self.scale_threshold * 2.0,
+-                max_nn=self.k_neighbors
+-            )
+-        )
+-        
+-        # Get normals
+-        normals = torch.from_numpy(np.asarray(pcd.normals)).to(points.device)
+-        
+-        return normals
+-
+-    def visualize_surface(self,
+-                         surface_points: torch.Tensor,
+-                         surface_normals: Optional[torch.Tensor] = None,
+-                         save_path: Optional[str] = None):
+-        """
+-        Visualize the extracted surface points and normals.
+-        
+-        Args:
+-            surface_points: Surface points (N, 3)
+-            surface_normals: Surface normals (N, 3)
+-            save_path: Optional path to save visualization
+-        """
+-        # Convert to numpy
+-        points_np = surface_points.detach().cpu().numpy()
+-        normals_np = surface_normals.detach().cpu().numpy() if surface_normals is not None else None
+-        
+-        # Create Open3D point cloud
+-        pcd = o3d.geometry.PointCloud()
+-        pcd.points = o3d.utility.Vector3dVector(points_np)
+-        
+-        if normals_np is not None:
+-            pcd.normals = o3d.utility.Vector3dVector(normals_np)
+-        
+-        # print("Point cloud has", len(points_np), "points.")
+-        if save_path is not None:
+-            o3d.io.write_point_cloud(save_path, pcd)
+-        else:
+-            print("Visualizing surface (Open3D window) – press q to exit.")
+-            o3d.visualization.draw_geometries([pcd], window_name="Surface Visualization (press q to exit)") 
+\ No newline at end of file
+diff --git a/utils/system_utils.py b/utils/system_utils.py
+index 7661c53..90ca6d7 100644
+--- a/utils/system_utils.py
++++ b/utils/system_utils.py
+@@ -12,7 +12,6 @@
+ from errno import EEXIST
+ from os import makedirs, path
+ import os
+-import re
+ 
+ def mkdir_p(folder_path):
+     # Creates a directory. equivalent to using mkdir -p on the command line
+@@ -25,13 +24,5 @@ def mkdir_p(folder_path):
+             raise
+ 
+ def searchForMaxIteration(folder):
+-    # Robustly extract iteration numbers from checkpoint filenames
+-    saved_iters = []
+-    for fname in os.listdir(folder):
+-        # Match any sequence of digits before .pth at the end
+-        m = re.search(r'(\d+)(?=\.pth$)', fname)
+-        if m:
+-            saved_iters.append(int(m.group(1)))
+-    if not saved_iters:
+-        raise FileNotFoundError(f"No checkpoint files with iteration number found in {folder}")
++    saved_iters = [int(fname.split("_")[-1]) for fname in os.listdir(folder)]
+     return max(saved_iters)
