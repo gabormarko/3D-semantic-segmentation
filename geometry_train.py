@@ -105,6 +105,8 @@ if __name__ == "__main__":
     parser.add_argument("--config_file", type=str, required=True, help="Path to config JSON")
     parser.add_argument("--use_wandb", action='store_true')
     parser.add_argument("--quiet", action="store_true", help="Suppress output if set")
+    parser.add_argument("--mode", type=str, choices=["geometry", "unified_lift"], default="geometry", help="Which training mode to use")
+
 
     args = parser.parse_args()
 

@@ -51,11 +51,12 @@ class ModelParams(ParamGroup):
         self._white_background = False
         self.data_device = "cuda"
         self.eval = False
-        self.n_views = 5 
+        self.n_views = 100
         self.random_init = False
         self.train_split = False
         self._object_path = "object_mask"
         self.num_classes = 200
+        self.mode = "geometry"
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):

@@ -20,10 +20,13 @@ WARNED = False
 def loadCam(args, id, cam_info, resolution_scale):
     orig_w, orig_h = cam_info.image.size
 
-    if args.resolution in [1, 2, 4, 8]:
-        resolution = round(orig_w/(resolution_scale * args.resolution)), round(orig_h/(resolution_scale * args.resolution))
+    # Use default resolution if not present
+    resolution = getattr(args, 'resolution', 1)
+
+    if resolution in [1, 2, 4, 8]:
+        res = round(orig_w/(resolution_scale * resolution)), round(orig_h/(resolution_scale * resolution))
     else:  # should be a type that converts to float
-        if args.resolution == -1:
+        if resolution == -1:
             if orig_w > 1600:
                 global WARNED
                 if not WARNED:
@@ -34,12 +37,12 @@ def loadCam(args, id, cam_info, resolution_scale):
             else:
                 global_down = 1
         else:
-            global_down = orig_w / args.resolution
+            global_down = orig_w / resolution
 
         scale = float(global_down) * float(resolution_scale)
-        resolution = (int(orig_w / scale), int(orig_h / scale))
+        res = (int(orig_w / scale), int(orig_h / scale))
 
-    resized_image_rgb = PILtoTorch(cam_info.image, resolution)
+    resized_image_rgb = PILtoTorch(cam_info.image, res)
 
     gt_image = resized_image_rgb[:3, ...]
     loaded_mask = None
@@ -47,11 +50,34 @@ def loadCam(args, id, cam_info, resolution_scale):
     if resized_image_rgb.shape[1] == 4:
         loaded_mask = resized_image_rgb[3:4, ...]
 
-    return Camera(colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
-                  FoVx=cam_info.FovX, FoVy=cam_info.FovY, 
-                  image=gt_image, gt_alpha_mask=loaded_mask,
-                  image_name=cam_info.image_name, uid=id, data_device=args.data_device,
-                  objects=None)
+    if args.mode == "geometry":
+        camera = Camera(
+            colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T,
+            FoVx=cam_info.FovX, FoVy=cam_info.FovY,
+            image=gt_image, gt_alpha_mask=loaded_mask,
+            image_name=cam_info.image_name, uid=id, data_device=args.data_device,
+            objects=None
+        )
+    else:
+        objects_np = np.array(cam_info.objects)
+        if objects_np.dtype in [np.float64, np.float32, np.float16, np.complex64,
+                                np.complex128, np.int64, np.int32, np.int16,
+                                np.int8, np.uint64, np.uint32, np.uint16, np.uint8,
+                                np.bool_]:
+            objects_tensor = torch.from_numpy(objects_np)
+        else:
+            objects_tensor = cam_info.objects  # fallback
+
+        camera = Camera(
+            colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T,
+            FoVx=cam_info.FovX, FoVy=cam_info.FovY,
+            image=gt_image, gt_alpha_mask=loaded_mask,
+            image_name=cam_info.image_name, uid=id, data_device=args.data_device,
+            mode=args.mode, objects=objects_tensor
+        )
+
+    return camera
+
 
 def cameraList_from_camInfos(cam_infos, resolution_scale, args):
     camera_list = []

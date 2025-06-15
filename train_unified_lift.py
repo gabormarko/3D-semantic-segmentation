@@ -497,7 +497,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
             if (iteration in checkpoint_iterations):
                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
-                torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
+                torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnts/chkpnt" + str(iteration) + ".pth")
 
 def prepare_output_and_logger(args):    
     if not args.model_path:
@@ -541,6 +541,8 @@ if __name__ == "__main__":
     parser.add_argument("--config_file", type=str, default="config.json", help="Path to the configuration file")
     parser.add_argument("--use_wandb", action='store_true', default=True, help="Use wandb to record loss value")
     parser.add_argument("--weight_loss", type=float, default=1e-0, help="Use wandb to record loss value")
+    parser.add_argument("--mode", type=str, choices=["geometry", "unified_lift"], default="unified_lift", help="Which training mode to use")
+
 
 
     args = parser.parse_args(sys.argv[1:])

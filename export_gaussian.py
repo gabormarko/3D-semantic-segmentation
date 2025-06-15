@@ -55,7 +55,7 @@ def export_gaussians_to_ply(gaussians, output_ply):
     o3d.io.write_point_cloud(output_ply, pcd)
     print(f"Exported {xyz.shape[0]} Gaussians as points to {output_ply}")
 
-def export_gaussian_ellipsoids_to_mesh(gaussians, output_mesh, max_ellipsoids=10000):
+def export_gaussian_ellipsoids_to_mesh(gaussians, output_mesh, max_ellipsoids=50000):
     xyz = gaussians.get_xyz.detach().cpu().numpy()
     scales = gaussians.get_scaling.detach().cpu().numpy()
     # Use DC color if available, else gray
@@ -124,26 +124,43 @@ def export_ply_to_ply(input_ply, output_ply):
     o3d.io.write_point_cloud(output_ply, pcd)
     print(f"Copied point cloud from {input_ply} to {output_ply}")
 
+
 if __name__ == "__main__":
-    chkpnt_folder = "/home/neural_fields/Unified-Lift-Daniel/output/unified_lift/scannetscene/chkpnts"
-    output_folder = "/home/neural_fields/Unified-Lift-Daniel/output/unified_lift/scannetscene/gaussians"
-    os.makedirs(output_folder, exist_ok=True)
-
-    chkpnt_files = sorted(glob.glob(os.path.join(chkpnt_folder, "*.pth")))
-
-    if len(chkpnt_files) == 0:
-        print(f"No .pth files found in {chkpnt_folder}")
-    else:
+    # Define scenes to process
+    scenes = ["ramen", "scannetscene", "teatime", "classroomscene", "officescene"]
+    base_dir = "/home/neural_fields/Unified-Lift-Daniel/output/unified_lift"
+    
+    for scene in scenes:
+        chkpnt_folder = os.path.join(base_dir, scene, "chkpnts")
+        output_folder = os.path.join(base_dir, scene, "gaussians")
+        os.makedirs(output_folder, exist_ok=True)
+        
+        print(f"\n{'='*80}")
+        print(f"Processing scene: {scene}")
+        print(f"{'='*80}")
+        
+        chkpnt_files = sorted(glob.glob(os.path.join(chkpnt_folder, "*.pth")))
+        
+        if len(chkpnt_files) == 0:
+            print(f"No .pth files found in {chkpnt_folder}")
+            continue
+            
+        print(f"Found {len(chkpnt_files)} checkpoint files")
+        
         for input_path in chkpnt_files:
             base_name = os.path.splitext(os.path.basename(input_path))[0]
-            points_ply = os.path.join(output_folder, f"out_{base_name}_points.ply")
-            ellipsoids_ply = os.path.join(output_folder, f"out_{base_name}_ellipsoids.ply")
-            print(f"Processing {input_path} -> {points_ply}, {ellipsoids_ply}")
-
             gaussians = load_gaussians_from_checkpoint(input_path)
-            export_gaussians_to_ply(gaussians, points_ply)
-            ellipsoids_ply = os.path.join(output_folder, f"out_{base_name}_ellipsoids_{suffix}.ply")
-            export_gaussian_ellipsoids_to_mesh(
-                gaussians,
-                ellipsoids_ply
-            ) 
+            xyz = gaussians.get_xyz.detach().cpu().numpy()
+            num_points = xyz.shape[0]
+            points_ply = os.path.join(output_folder, f"{scene}_{base_name}_{num_points}_pts.ply")
+            ellipsoids_ply = os.path.join(output_folder, f"{scene}_{base_name}_{num_points}_ellipsoids.ply")
+            print(f"\nProcessing {os.path.basename(input_path)}")
+            print(f"Output files:")
+            print(f"  Points: {points_ply}")
+            print(f"  Ellipsoids: {ellipsoids_ply}")
+            try:
+                export_gaussians_to_ply(gaussians, points_ply)
+                export_gaussian_ellipsoids_to_mesh(gaussians, ellipsoids_ply)
+            except Exception as e:
+                print(f"Error processing {input_path}: {e}")
+                continue

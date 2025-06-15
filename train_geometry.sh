@@ -1,3 +1,5 @@
+# Increase open file limit
+ulimit -n 65536
 #!/bin/bash
 
 # Create output directory if it doesn't exist
