@@ -36,10 +36,10 @@ class ParamGroup:
 
     def extract(self, args):
         group = GroupParams()
-        for arg in vars(args).items():
-            if arg[0] in vars(self) or ("_" + arg[0]) in vars(self):
-                setattr(group, arg[0], arg[1])
+        for key in vars(args):
+            setattr(group, key, getattr(args, key))
         return group
+
 
 class ModelParams(ParamGroup): 
     def __init__(self, parser, sentinel=False):
@@ -56,7 +56,6 @@ class ModelParams(ParamGroup):
         self.train_split = False
         self._object_path = "object_mask"
         self.num_classes = 200
-        self.mode = "geometry"
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):

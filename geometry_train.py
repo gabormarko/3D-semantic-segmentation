@@ -34,7 +34,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     first_iter = 0
     prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
-    scene = Scene(dataset, gaussians)
+    scene = Scene(dataset, gaussians, mode="geometry")
     gaussians.training_setup(opt)
 
     if checkpoint:
@@ -105,7 +105,6 @@ if __name__ == "__main__":
     parser.add_argument("--config_file", type=str, required=True, help="Path to config JSON")
     parser.add_argument("--use_wandb", action='store_true')
     parser.add_argument("--quiet", action="store_true", help="Suppress output if set")
-    parser.add_argument("--mode", type=str, choices=["geometry", "unified_lift"], default="geometry", help="Which training mode to use")
 
 
     args = parser.parse_args()

@@ -22,13 +22,14 @@ class Scene:
 
     gaussians : GaussianModel
 
-    def __init__(self, args : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0]):
+    def __init__(self, args : ModelParams, gaussians : GaussianModel, mode, load_iteration=None, shuffle=True, resolution_scales=[2.0]):
         """b
         :param path: Path to colmap scene main folder.
         """
         self.model_path = args.model_path
         self.loaded_iter = None
         self.gaussians = gaussians
+        self.mode = mode
 
         if load_iteration:
             if load_iteration == -1:
@@ -71,10 +72,10 @@ class Scene:
         for resolution_scale in resolution_scales:
             print("Loading Training Cameras")
             train_subset = scene_info.train_cameras[:500]
-            self.train_cameras[resolution_scale] = cameraList_from_camInfos(train_subset, resolution_scale, args)
+            self.train_cameras[resolution_scale] = cameraList_from_camInfos(train_subset, resolution_scale, args, mode)
 
             print("Loading Test Cameras")
-            self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args)
+            self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args, mode)
 
         if self.loaded_iter:
             if isinstance(self.loaded_iter,str):

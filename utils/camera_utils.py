@@ -17,7 +17,7 @@ import torch
 
 WARNED = False
 
-def loadCam(args, id, cam_info, resolution_scale):
+def loadCam(args, id, cam_info, resolution_scale, mode):
     orig_w, orig_h = cam_info.image.size
 
     # Use default resolution if not present
@@ -50,9 +50,9 @@ def loadCam(args, id, cam_info, resolution_scale):
     if resized_image_rgb.shape[1] == 4:
         loaded_mask = resized_image_rgb[3:4, ...]
 
-    if args.mode == "geometry":
+    if mode == "geometry":
         camera = Camera(
-            colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T,
+            mode, colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T,
             FoVx=cam_info.FovX, FoVy=cam_info.FovY,
             image=gt_image, gt_alpha_mask=loaded_mask,
             image_name=cam_info.image_name, uid=id, data_device=args.data_device,
@@ -69,21 +69,21 @@ def loadCam(args, id, cam_info, resolution_scale):
             objects_tensor = cam_info.objects  # fallback
 
         camera = Camera(
-            colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T,
+            mode, colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T,
             FoVx=cam_info.FovX, FoVy=cam_info.FovY,
             image=gt_image, gt_alpha_mask=loaded_mask,
             image_name=cam_info.image_name, uid=id, data_device=args.data_device,
-            mode=args.mode, objects=objects_tensor
+            objects=objects_tensor
         )
 
     return camera
 
 
-def cameraList_from_camInfos(cam_infos, resolution_scale, args):
+def cameraList_from_camInfos(cam_infos, resolution_scale, args, mode):
     camera_list = []
 
     for id, c in enumerate(cam_infos):
-        camera_list.append(loadCam(args, id, c, resolution_scale))
+        camera_list.append(loadCam(args, id, c, resolution_scale, mode))
 
     return camera_list
 

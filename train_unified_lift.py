@@ -281,14 +281,12 @@ def clustering_for_matching(objects, virtual_gt_labels, code_book, confidence_ma
     clustering_loss = (torch.norm(objects-codebook_feature, dim=-1, keepdim=True)).mean()
     return clustering_loss
     #
-        
-    
-    
+
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, use_wandb, weight_loss):
     first_iter = 0
     prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
-    scene = Scene(dataset, gaussians)
+    scene = Scene(dataset, gaussians, mode = "unified-lift")
     gaussians.training_setup(opt)
     num_classes = dataset.num_classes
     print("Num classes: ",num_classes)
@@ -541,8 +539,6 @@ if __name__ == "__main__":
     parser.add_argument("--config_file", type=str, default="config.json", help="Path to the configuration file")
     parser.add_argument("--use_wandb", action='store_true', default=True, help="Use wandb to record loss value")
     parser.add_argument("--weight_loss", type=float, default=1e-0, help="Use wandb to record loss value")
-    parser.add_argument("--mode", type=str, choices=["geometry", "unified_lift"], default="unified_lift", help="Which training mode to use")
-
 
 
     args = parser.parse_args(sys.argv[1:])
