@@ -14,7 +14,7 @@ ADE20K_LABELS = [
 """
 
 ADE20K_LABELS = [
-    "wall", "building", "sky", "floor", "tree", "ceiling", "road", "bed", "windowpane", "grass",
+    "bear", "sheep", "wall", "building", "sky", "floor", "tree", "ceiling", "road", "bed", "windowpane", "grass",
     "cabinet", "sidewalk", "person", "earth", "door", "table", "mountain", "plant", "curtain", "chair",
     "car", "water", "painting", "sofa", "shelf", "house", "sea", "mirror", "rug", "field", "armchair",
     "seat", "fence", "desk", "rock", "wardrobe", "lamp", "bathtub", "railing", "cushion", "base",
@@ -65,7 +65,7 @@ def visualize_class_map(feature_path, image_path=None, output_path=None):
     plt.legend(handles=legend_patches, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0., fontsize='small')
     if output_path:
         plt.savefig(output_path, bbox_inches='tight')
-        print(f"Saved visualization to {output_path}")
+        # print(f"Saved visualization to {output_path}")
     else:
         plt.show()
     plt.close()
