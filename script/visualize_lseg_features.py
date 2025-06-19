@@ -5,8 +5,7 @@ import os
 
 # ADE20K class labels (shortened for display, use full list if needed)
 ADE20K_LABELS = [
-    "wall", "building", "sky", "floor", "tree", "ceiling", "road", "bed", "windowpane", "grass",
-    # ... (add all 150 class names if you want to display them)
+    "wall", "building", "sky", "floor", "tree", "ceiling", "road", "bed", "windowpane", "grass"
 ]
 
 def visualize_class_map(feature_path, output_path=None):
