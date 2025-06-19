@@ -14,7 +14,7 @@ try:
 except ImportError:
     raise ImportError('Please install the official LSeg repo and make sure it is in your PYTHONPATH.')
 
-# Full ADE20K 150-class label set
+# Full ADE20K 150-class label set, as used by default in LSeg - can be modified if needed
 ADE20K_LABELS = [
     "wall", "building", "sky", "floor", "tree", "ceiling", "road", "bed", "windowpane", "grass",
     "cabinet", "sidewalk", "person", "earth", "door", "table", "mountain", "plant", "curtain", "chair",
