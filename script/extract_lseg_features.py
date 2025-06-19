@@ -1,14 +1,17 @@
 # Script to extract LSeg features from all images in a directory
 # Usage: python extract_lseg_features.py --input_dir /path/to/images --output_dir /path/to/features
 
+import sys
 import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'lang-seg')))
+
 import argparse
 import torch
 from torchvision import transforms
 from PIL import Image
 import numpy as np
 
-print("LSeg feature extraction script loaded.")
+# print("LSeg feature extraction script loaded.")
 
 # Import LSeg model from official repo (assumes installed via pip or local clone)
 try:
