@@ -8,7 +8,7 @@ from torchvision import transforms
 from PIL import Image
 import numpy as np
 
-print("LSeg feature extraction script loaded!")
+print("LSeg feature extraction script loaded.")
 
 # Import LSeg model from official repo (assumes installed via pip or local clone)
 try:
