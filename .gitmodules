@@ -1,6 +1,3 @@
-[submodule "lang-seg"]
-	path = lang-seg
-	url = https://github.com/isl-org/lang-seg
 [submodule "MinkowskiEngine"]
 	path = MinkowskiEngine
 	url = https://github.com/gabormarko/MinkowskiEngine.git
