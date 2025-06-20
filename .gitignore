@@ -42,3 +42,15 @@ Thumbs.db
 # Ignore large data folders
 Gaussian-Grouping/
 
+# Ignore additional dataset and checkpoints folders
+lang-seg/datasets/
+datasets/
+lang-seg/checkpoints/
+checkpoints/
+
+# Ignore large model and checkpoint files
+*.ckpt
+*.pth
+*.pt
+*.tar
+
