@@ -47,7 +47,9 @@ lang-seg/datasets/
 datasets/
 lang-seg/checkpoints/
 checkpoints/
+lang-seg
 
+MinkowskiEngine
 MinkowskiEngine/data/
 MinkowskiEngine/checkpoints/
 
