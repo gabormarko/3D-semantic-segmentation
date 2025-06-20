@@ -41,4 +41,5 @@ Thumbs.db
 
 # Ignore large data folders
 Gaussian-Grouping/
-
+datasets/
+lang-seg/ADEChallengeData2016
