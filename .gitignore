@@ -48,6 +48,9 @@ datasets/
 lang-seg/checkpoints/
 checkpoints/
 
+MinkowskiEngine/data/
+MinkowskiEngine/checkpoints/
+
 # Ignore large model and checkpoint files
 *.ckpt
 *.pth
