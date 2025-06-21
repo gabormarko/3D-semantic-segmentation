@@ -86,7 +86,7 @@ def main():
         max_corner = np.max(surface_points, axis=0)
         bbox = max_corner - min_corner
         bbox_prod = np.prod(bbox)
-    target_voxels = 5000000*1/2 # Adjusted target voxels for larger scenes
+    target_voxels = 500000000*1/2 # Adjusted target voxels for larger scenes
     voxel_size = (bbox_prod / target_voxels)
     print(f"Auto-tuned voxel size for ~{target_voxels} voxels: {voxel_size:.3f}")
 
