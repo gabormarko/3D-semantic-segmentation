@@ -20,6 +20,7 @@ except ImportError:
     raise ImportError('Please install the official LSeg repo and make sure it is in your PYTHONPATH.')
 
 # Full ADE20K 150-class label set, as used by default in LSeg - can be modified if needed
+"""
 ADE20K_LABELS = [
     "wall", "building", "sky", "floor", "tree", "ceiling", "road", "bed", "windowpane", "grass",
     "cabinet", "sidewalk", "person", "earth", "door", "table", "mountain", "plant", "curtain", "chair",
@@ -37,11 +38,17 @@ ADE20K_LABELS = [
     "sculpture", "hood", "sconce", "vase", "traffic light", "tray", "ashcan", "fan", "pier", "crt screen",
     "plate", "monitor", "bulletin board", "shower", "radiator", "glass", "clock", "flag"
 ]
+"""
 
+# ScanNet++ labels
+TOP100_PATH = "/home/neural_fields/Unified-Lift-Gabor/data/scannetpp/top100.txt"
+with open(TOP100_PATH, "r") as f:
+    LABELS = [line.strip() for line in f if line.strip()]
+    
 def load_lseg_model(device):
     # Load LSeg model (modify as needed for your setup)
     model = LSegNet(
-        labels=ADE20K_LABELS,
+        labels=LABELS,
         backbone='clip_vitl16_384',
         features=512,
         aux=False,
@@ -71,7 +78,7 @@ def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = load_lseg_model(device)
     img_files = [f for f in os.listdir(args.input_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-    img_files = sorted(img_files)[:10]  # Only process the first 10 images
+    img_files = sorted(img_files)#[:10]  # Only process the first 10 images
     for img_file in img_files:
         img_path = os.path.join(args.input_dir, img_file)
         features = extract_features(model, img_path, device)
