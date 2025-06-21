@@ -56,6 +56,8 @@ for fname in tqdm(sorted(os.listdir(FEATURE_DIR))):
     if features.shape[0] < 10:  # likely [C, H, W], transpose to [H, W, C]
         features = features.transpose(1, 2, 0)
     H, W, C = features.shape
+    # Print statistics of 2D features before projection
+    print(f"{fname} feature stats: mean={np.mean(features):.4f}, std={np.std(features):.4f}, min={np.min(features):.4f}, max={np.max(features):.4f}")
     if feature_dim is None:
         feature_dim = C
         voxel_feat_sum = np.zeros((N_vox, C), dtype=np.float32)
@@ -73,7 +75,21 @@ for fname in tqdm(sorted(os.listdir(FEATURE_DIR))):
         continue
     K, R, t = img_pose_dict[colmap_img_name]
     # --- DEMO: Use a constant depth for all pixels (replace with real depth if available) ---
-    const_depth = 2.0  # meters (adjust as needed)
+    # Try to load per-pixel depth if available
+    depth_path = os.path.join(FEATURE_DIR, img_base + '_depth.npy')
+    if os.path.exists(depth_path):
+        depth = np.load(depth_path)
+        if depth.shape != (H, W):
+            print(f"Warning: depth shape {depth.shape} does not match image {H,W}")
+            depth = np.full((H, W), 2.0)
+        use_depth = True
+    else:
+        depth = np.full((H, W), 2.0)
+        use_depth = False
+    if use_depth:
+        print(f"Using depth map for {fname}")
+    else:
+        print(f"No depth map for {fname}, using constant depth")
     # Precompute inverse intrinsics and camera-to-world
     Kinv = np.linalg.inv(K)
     Rcw = R.T  # COLMAP: world2cam, so cam2world is R.T
@@ -83,7 +99,7 @@ for fname in tqdm(sorted(os.listdir(FEATURE_DIR))):
         for x in range(W):
             # 1. Backproject pixel to camera coordinates
             pix = np.array([x, y, 1.0])
-            p_cam = Kinv @ pix * const_depth  # [3]
+            p_cam = Kinv @ pix * depth[y, x]  # [3]
             # 2. Transform to world coordinates
             p_world = Rcw @ p_cam + tcw.squeeze()
             # 3. Find nearest voxel
@@ -98,6 +114,25 @@ voxel_feat_avg = np.zeros_like(voxel_feat_sum)
 nonzero = voxel_feat_count > 0
 voxel_feat_avg[nonzero] = voxel_feat_sum[nonzero] / voxel_feat_count[nonzero][:, None]
 
+# Print statistics of voxel features
+print("Voxel feature statistics:")
+print("  mean:", np.mean(voxel_feat_avg))
+print("  std:", np.std(voxel_feat_avg))
+print("  min:", np.min(voxel_feat_avg))
+print("  max:", np.max(voxel_feat_avg))
+print("  nonzero voxels:", np.sum(nonzero), "/", len(nonzero))
+
 # 5. Save voxel features
 np.save(OUTPUT_FEATURES, voxel_feat_avg)
 print(f"Saved voxel features: {OUTPUT_FEATURES}")
+
+# Plot histogram of voxel feature values
+import matplotlib.pyplot as plt
+plt.figure(figsize=(8,4))
+plt.hist(voxel_feat_avg[nonzero].flatten(), bins=100, color='blue', alpha=0.7)
+plt.title('Histogram of Voxel Feature Values (nonzero voxels)')
+plt.xlabel('Feature Value')
+plt.ylabel('Count')
+plt.tight_layout()
+plt.savefig('voxel_feature_histogram.png')
+print('Saved voxel feature histogram as voxel_feature_histogram.png')
