@@ -126,7 +126,8 @@ def export_ply_to_ply(input_ply, output_ply):
 
 if __name__ == "__main__":
     # Define scenes to process
-    scenes = ["ramen", "figurines", "teatime"]
+    #scenes = ["ramen", "figurines", "teatime"]
+    scenes = ["officescene", "classroomscene"]
     base_dir = "/home/neural_fields/Unified-Lift-Gabor/output/unifed_lift"
     
     for scene in scenes:
