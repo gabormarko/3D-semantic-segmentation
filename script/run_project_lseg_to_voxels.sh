@@ -3,10 +3,15 @@
 # Usage: bash run_project_lseg_to_voxels.sh [VOXEL_PLY] [FEATURE_DIR] [OUTPUT_FEATURES] [COLMAP_SPARSE_DIR]
 
 # Default paths (edit as needed)
-VOXEL_PLY="/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/teatime_minkowski_68458vox_iter30000_grid.ply"
-FEATURE_DIR="/home/neural_fields/Unified-Lift-Gabor/data/lerf/teatime/lseg_features"
-OUTPUT_FEATURES="/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/teatime_voxel_features.npy"
-COLMAP_SPARSE_DIR="/home/neural_fields/Unified-Lift-Gabor/data/lerf/teatime/sparse/0"
+#VOXEL_PLY="/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/teatime_minkowski_68458vox_iter30000_grid.ply"
+#FEATURE_DIR="/home/neural_fields/Unified-Lift-Gabor/data/lerf/teatime/lseg_features"
+#OUTPUT_FEATURES="/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/teatime_voxel_features.npy"
+#COLMAP_SPARSE_DIR="/home/neural_fields/Unified-Lift-Gabor/data/lerf/teatime/sparse/0"
+
+VOXEL_PLY = "/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/officescene/officescene_minkowski_26239vox_iter30000_grid.ply"
+FEATURE_DIR = "/home/neural_fields/Unified-Lift-Gabor/data/scannetpp/officescene/lseg_features"
+OUTPUT_FEATURES = "/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/officescene/officescene_voxel_features.npy"
+COLMAP_SPARSE_DIR = "/home/neural_fields/Unified-Lift-Gabor/data/scannetpp/officescene/sparse/0"
 
 # Allow overriding via command line
 if [ ! -z "$1" ]; then VOXEL_PLY="$1"; fi
