@@ -38,22 +38,18 @@ def main():
         coords -= min_coord
     max_coord = coords.max(axis=0)
     dims = max_coord + 1  # sizes along x,y,z
-    print(f"Grid dims (x,y,z): {dims.tolist()}")
-
-    # Allocate occupancy: shape [Z, Y, X]
-    X, Y, Z = dims
-    occupancy = torch.zeros((Z, Y, X), dtype=torch.int64)
-
-    # Assign unique IDs (1-based)
-    num_pts = coords.shape[0]
-    print(f"Assigning IDs to {num_pts} voxels")
-    for idx, (x,y,z) in enumerate(coords):
-        occupancy[z, y, x] = idx + 1
-
-    print(f"Occupancy tensor shape: {occupancy.shape}")
-    print(f"Max ID: {occupancy.max().item()}")
-
-    torch.save(occupancy, args.out_tensor)
+    print(f"Grid dims (x,y,z): {dims}")
+    # Assign unique IDs to occupied voxels
+    occ = np.zeros(dims[::-1], dtype=np.int32)  # [Z,Y,X]
+    for i, c in enumerate(coords):
+        occ[tuple(c[::-1])] = i + 1  # 1-based
+    print(f"Assigning IDs to {coords.shape[0]} voxels")
+    print(f"Occupancy tensor shape: {occ.shape}")
+    print(f"Max ID: {occ.max()}")
+    # Debug: print only the number of occupied voxels
+    num_occupied = (occ > 0).sum()
+    print(f"Number of occupied voxels: {num_occupied}")
+    torch.save(torch.from_numpy(occ), args.out_tensor)
     print(f"Saved occupancy tensor to {args.out_tensor}")
 
 if __name__ == '__main__':

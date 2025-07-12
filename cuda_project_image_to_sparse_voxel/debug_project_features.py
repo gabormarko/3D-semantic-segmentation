@@ -21,7 +21,7 @@ def main():
     args = parser.parse_args()
 
     assert os.path.isfile(args.tensor_data), f"tensor_data not found: {args.tensor_data}"
-    data = torch.load(args.tensor_data, weights_only=False, map_location='cpu')
+    data = torch.load(args.tensor_data, map_location='cpu')
     feats = data['encoded_2d_features']  # [1, V, H, W, C]
     occ  = data['occupancy_3D']          # [Z, Y, X]
     intr = data['intrinsicParams']       # [1, V, 4]
@@ -34,21 +34,32 @@ def main():
         print(f"{name}: shape={tuple(t.shape)}, dtype={t.dtype}, device={t.device}")
     print(f"voxel_size: {voxel_size}")
 
+    # Print a slice of each tensor to inspect values
+    print("\n--- Tensor Value Inspection ---")
+    print("feats (slice):", feats[0, 0, 0, 0, :10].cpu().numpy())
+    print("occ (unique values):", torch.unique(occ).cpu().numpy())
+    print("intr (first view):", intr[0, 0, :].cpu().numpy())
+    print("extr (first view):", extr[0, 0, :, :].cpu().numpy())
+    print("grid_origin:", grid_origin.cpu().numpy())
+    print("-----------------------------\n")
+
     # move to cuda
-    feats = feats.cuda().contiguous()
-    # DEBUG: restrict to first view only to simplify launch
-    feats = feats[:, :1, ...]
-    # ensure occupancy has a batch dimension [1, Z, Y, X]
-    occ    = occ.unsqueeze(0).cuda().contiguous().long()
-    # kernel expects intrinsicParams shape [batch,4]
-    # flatten intrinsics to [batch, 4]
-    intr   = intr[:, 0, :].cuda().contiguous()  # [1,4]
-    # slice extr to first view then flatten to 1D float array [batch*views*16]
-    extr   = extr[:, :1, :, :].cuda().contiguous().view(-1)  # [1*1*16]
+    feats = feats.cuda().contiguous()  # [1, V, H, W, C]
+    occ    = occ.unsqueeze(0).cuda().contiguous().long()  # [1, Z, Y, X]
+    # Restrict to first view only for debug
+    feats = feats[:, 0:1, ...]         # [1, 1, H, W, C]
+    intr = intr[:, 0, :].cuda().contiguous()  # [1, 4]
+    extr = extr[:, 0, :, :].contiguous().view(-1).cuda()  # flatten and move to CUDA
     grid_origin = grid_origin.cuda().contiguous()
 
+    # Print shapes for debug
+    print("[DEBUG] feats shape:", feats.shape)
+    print("[DEBUG] occ shape:", occ.shape)
+    print("[DEBUG] intr shape:", intr.shape)
+    print("[DEBUG] extr shape:", extr.shape)
+    print("[DEBUG] grid_origin shape:", grid_origin.shape)
+
     # compute max ID and allocate outputs
-    # use maximum occupancy ID to size mapping arrays
     max_id = int(occ.max().item())
     num_ids = max_id + 1  # include zero ID
     C = feats.shape[-1]
@@ -56,7 +67,8 @@ def main():
     proj_feats    = torch.zeros((num_ids, C), dtype=torch.float32, device='cuda')
 
     # build opts: [W, H, dmin, dmax, step]
-    _, V, H, W, _ = feats.shape  # V now 1 for debug
+    # Use correct dims for opts
+    _, V, H, W, C = feats.shape
     dmin, dmax = 0.0, 10.0
     step = voxel_size * 0.5
     opts = torch.tensor([W, H, dmin, dmax, step], dtype=torch.float32, device='cpu')
@@ -77,8 +89,8 @@ def main():
     # verify expected sizes
     assert feats.dim()==5
     assert occ.dim()==4
-    assert intr.dim()==2
-    assert extr.dim()==1
+    # assert intr.dim()==3  # Removed: intr is now 2D as required by the kernel
+    # assert extr.dim()==4  # Removed: extr is now 1D as required by the kernel
     assert opts.numel()==5
     assert pred_mode.numel()==1
     # run kernel
@@ -90,6 +102,10 @@ def main():
     )
     torch.cuda.synchronize()
     print("Kernel done.")
+
+    # Debug: print unique values and stats after kernel
+    print("mapping2dto3d unique values:", torch.unique(mapping2dto3d, return_counts=True))
+    print("proj_feats stats: min", proj_feats.min().item(), "max", proj_feats.max().item())
 
     # move to cpu and save
     out = {

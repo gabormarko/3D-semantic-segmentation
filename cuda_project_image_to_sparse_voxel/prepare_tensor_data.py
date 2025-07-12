@@ -38,40 +38,36 @@ def qvec2rotmat(q):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--lseg_dir', required=True, help='Folder of .npy LSeg features')
-    parser.add_argument('--scaled_camera_params', required=True, help='Path to scaled_camera_params.json')
-    parser.add_argument('--occupancy', required=True, help='Path to occupancy.pt (Z,Y,X) int64 IDs')
-    parser.add_argument('--voxel_size', type=float, default=1.0, help='Voxel size')
-    parser.add_argument('--grid_origin', nargs=3, type=float, default=[0,0,0], help='Grid origin')
-    parser.add_argument('--max_images', type=int, default=None, help='Max number of images (views)')
-    parser.add_argument('--output', default='tensor_data.pt', help='Output .pt file')
+    parser.add_argument('--scaled_camera_params', required=True, help='Path to scaled camera params JSON')
+    parser.add_argument('--occupancy', required=True, help='Path to occupancy.pt')
+    parser.add_argument('--voxel_size', type=float, required=True, help='Voxel size')
+    parser.add_argument('--grid_origin', nargs=3, type=float, required=True, help='Grid origin (x y z)')
+    parser.add_argument('--max_images', type=int, default=10, help='Max images to use')
+    parser.add_argument('--output', required=True, help='Output tensor_data.pt')
     args = parser.parse_args()
 
-    # Validate input paths
-    if not os.path.isdir(args.lseg_dir):
-        print(f"Error: lseg_dir not found: {args.lseg_dir}")
-        exit(1)
-    if not os.path.isfile(args.occupancy):
-        print(f"Error: occupancy tensor not found: {args.occupancy}")
-        exit(1)
-    if not os.path.isfile(args.scaled_camera_params):
-        print(f"Error: scaled_camera_params JSON not found: {args.scaled_camera_params}")
-        exit(1)
-
-    # Load occupancy
     print(f"Loading occupancy from: {args.occupancy}")
-    occupancy = torch.load(args.occupancy, map_location='cpu')
-    print(f"Occupancy shape: {occupancy.shape}, max ID: {int(occupancy.max().item())}")
+    occ = torch.load(args.occupancy)
+    print(f"Occupancy shape: {occ.shape}, max ID: {occ.max().item()}")
 
-    # Load camera params
     print(f"Loading camera params from: {args.scaled_camera_params}")
     with open(args.scaled_camera_params, 'r') as f:
-        cam_data = json.load(f)
-    imgs = cam_data['images']
-    # Normalize images: could be dict of id->info or list of dicts
-    if isinstance(imgs, dict):
-        imgs = list(imgs.values())
-    cams = {int(k): v for k,v in cam_data['cameras'].items()}
+        cam_params = json.load(f)
+    imgs = cam_params['images']
+    cams = cam_params['cameras']
     print(f"Found {len(imgs)} images, {len(cams)} cameras in JSON")
+
+    # Build mapping from image filename to entry
+    filename_to_entry = {}
+    for k, v in imgs.items() if isinstance(imgs, dict) else enumerate(imgs):
+        # v may be dict with 'name' or just the filename string
+        if isinstance(v, dict) and 'name' in v:
+            filename_to_entry[v['name']] = v
+        elif isinstance(v, str):
+            filename_to_entry[v] = v  # fallback
+        else:
+            continue
+    print(f"Indexed {len(filename_to_entry)} image filenames from JSON")
 
     # Gather LSeg .npy features
     files = sorted([p for p in os.listdir(args.lseg_dir) if p.endswith('.npy')])
@@ -80,47 +76,165 @@ if __name__ == '__main__':
     V = len(files)
     print(f"Using {V} feature files from {args.lseg_dir}")
 
+    # Print unmatched names
+    feature_basenames = set([fname[:-4] if fname.endswith('.npy') else fname for fname in files])
+    img_names = set(filename_to_entry.keys())
+    unmatched_features = feature_basenames - img_names
+    unmatched_imgs = img_names - feature_basenames
+    if unmatched_features:
+        print("[DEBUG] Feature files with no matching image entry:")
+        for name in sorted(unmatched_features):
+            print("  ", name)
+    if unmatched_imgs:
+        print(f"[DEBUG] Image entries with no matching feature file: {len(unmatched_imgs)}")
+
     feats_list, intr_list, ext_list = [], [], []
     H = W = C = None
+    used = 0
+    images_dir = '/home/neural_fields/Unified-Lift-Gabor/data/scannetpp/officescene/images'
     for fname in files:
-        # remove .npy suffix to match image names exactly
         base = fname[:-4]  # strip '.npy'
-        # match entry by exact image name
-        entry = next((im for im in imgs if im.get('name','') == base), None)
+        entry = filename_to_entry.get(base, None)
         if entry is None:
-            raise ValueError(f"No camera entry for feature file: {fname} (expected name: {base})")
+            print(f"[WARN] No camera entry for feature file: {fname} (expected name: {base}), skipping.")
+            continue
+        # Debug: print feature/camera alignment
+        if isinstance(entry, dict) and 'name' in entry:
+            print(f"[ALIGNMENT DEBUG] Feature file: {fname} <-> Camera entry: {entry['name']}")
         arr = np.load(os.path.join(args.lseg_dir, fname))
-        if H is None:
-            H, W, C = arr.shape
-            print(f"Detected feature map size: {H}x{W}x{C}")
-        feats_list.append(torch.from_numpy(arr).float())
-        params = cams[int(entry['camera_id'])]['params']
-        if len(params) == 4:
-            fx, fy, cx, cy = params
-        else:
-            fx, cx, cy = params; fy = fx
-        intr_list.append(torch.tensor([fx, fy, cx, cy], dtype=torch.float32))
-        q, t = entry['qvec'], entry['tvec']
-        R = qvec2rotmat(q)
-        T = np.eye(4, dtype=np.float32)
-        T[:3,:3], T[:3,3] = R, t
-        invT = np.linalg.inv(T)
-        ext_list.append(torch.from_numpy(invT))
 
-    encoded_2d = torch.stack(feats_list, 0).unsqueeze(0)
+        # Robustly find the original image file
+        orig_img_path = None
+        checked_candidates = []
+        if isinstance(entry, dict) and 'name' in entry:
+            # First, check for the file with the base name and no extra extension
+            candidate = os.path.join(images_dir, base)
+            checked_candidates.append(candidate)
+            if os.path.exists(candidate):
+                orig_img_path = candidate
+                print(f"[find_original_image] Found exact match (no extension added): {candidate}")
+            # Then try with common extensions if not found
+            if orig_img_path is None:
+                for ext in ['.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG']:
+                    candidate = os.path.join(images_dir, base + ext)
+                    checked_candidates.append(candidate)
+                    if os.path.exists(candidate):
+                        orig_img_path = candidate
+                        print(f"[find_original_image] Found exact match: {candidate}")
+                        break
+            # Fallback: case-insensitive and extension-insensitive search
+            if orig_img_path is None:
+                try:
+                    for fname_img in os.listdir(images_dir):
+                        fbase, fext = os.path.splitext(fname_img)
+                        if fbase.lower() == base.lower():
+                            candidate = os.path.join(images_dir, fname_img)
+                            checked_candidates.append(candidate)
+                            print(f"[find_original_image] Fallback match: {fname_img} in {images_dir}")
+                            orig_img_path = candidate
+                            break
+                except Exception as e:
+                    print(f"[find_original_image] Error listing directory {images_dir}: {e}")
+            if orig_img_path is None:
+                print(f"[find_original_image] Checked candidates:")
+                for c in checked_candidates:
+                    print(f"  {c}")
+
+        if orig_img_path is not None:
+            from PIL import Image
+            orig_img = Image.open(orig_img_path)
+            orig_w, orig_h = orig_img.size  # PIL: (width, height)
+            print(f"[DEBUG] Original image size for {base}: {orig_h}x{orig_w} (height x width)")
+            # arr: [C, H, W] or [H, W, C]
+            if arr.shape[0] < 10:  # [C, H, W]
+                arr_torch = torch.from_numpy(arr).unsqueeze(0).float()  # [1, C, H, W]
+            else:  # [H, W, C]
+                arr_torch = torch.from_numpy(arr).permute(2, 0, 1).unsqueeze(0).float()
+            upsampled = torch.nn.functional.interpolate(
+                arr_torch, size=(orig_h, orig_w), mode='bilinear', align_corners=False
+            )
+            arr = upsampled.squeeze(0).cpu().numpy()
+            print(f"[DEBUG] Upsampled feature map shape for {base}: {arr.shape}")
+            # Print image size in (height x width) order for clarity
+            if arr.shape[0] < 10:
+                C, H_, W_ = arr.shape
+            else:
+                H_, W_, C = arr.shape
+            print(f"[DEBUG] Image size for frustum: {H_}x{W_} (height x width)")
+            if arr.shape[0] < 10:
+                C, H_, W_ = arr.shape
+            else:
+                H_, W_, C = arr.shape
+                arr = np.transpose(arr, (2, 0, 1))  # [C, H, W]
+            if H is None:
+                H, W, C = H_, W_, arr.shape[0]
+                print(f"Upsampled feature map to: {H}x{W}x{C}")
+            feats_list.append(torch.from_numpy(arr).float())
+        else:
+            print(f"[DEBUG] No original image found for {base}, using feature shape as is: {arr.shape}")
+            if arr.shape[0] < 10:
+                C, H_, W_ = arr.shape
+            else:
+                H_, W_, C = arr.shape
+                arr = np.transpose(arr, (2, 0, 1))  # [C, H, W]
+            if H is None:
+                H, W, C = H_, W_, arr.shape[0]
+                print(f"Detected feature map size: {H}x{W}x{C}")
+            feats_list.append(torch.from_numpy(arr).float())
+        # entry may be dict or str
+        if isinstance(entry, dict):
+            # Use string key for camera_id to avoid KeyError
+            cam_id = str(entry['camera_id'])
+            params = cams[cam_id]['params']
+            if len(params) == 4:
+                fx, fy, cx, cy = params
+            else:
+                fx, cx, cy = params; fy = fx
+            intr_list.append(torch.tensor([fx, fy, cx, cy], dtype=torch.float32))
+            
+            # Use the pre-computed rotation matrix 'R' from the JSON file
+            R = np.array(entry['R'], dtype=np.float32)
+            t = np.array(entry['tvec'], dtype=np.float32)
+
+            # Create the camera-to-world matrix (the inverse of the view matrix [R|t])
+            # The inverse is [R.T | -R.T @ t]
+            cam_to_world = np.eye(4, dtype=np.float32)
+            cam_to_world[:3, :3] = R.T
+            cam_to_world[:3, 3] = -R.T @ t
+            
+            ext_list.append(torch.from_numpy(cam_to_world))
+            used += 1
+        else:
+            print(f"[WARN] Entry for {base} is not a dict, skipping.")
+            continue
+
+    if not feats_list:
+        raise RuntimeError("No valid feature/camera pairs found!")
+
+    encoded_2d = torch.stack(feats_list, 0).unsqueeze(0)  # [1, V, C, H, W]
+    # Convert to channels-last: [1, V, H, W, C]
+    encoded_2d = encoded_2d.permute(0, 1, 3, 4, 2).contiguous()
     intrinsicParams = torch.stack(intr_list, 0).unsqueeze(0)
     viewMatrixInv = torch.stack(ext_list, 0).unsqueeze(0)
     grid_origin = torch.tensor(args.grid_origin, dtype=torch.float32)
     voxel_size = float(args.voxel_size)
 
     out = {
-        'encoded_2d_features': encoded_2d,
-        'occupancy_3D': occupancy,
+        'encoded_2d_features': encoded_2d,  # [B, V, H, W, C]
+        'occupancy_3D': occ,
         'intrinsicParams': intrinsicParams,
         'viewMatrixInv': viewMatrixInv,
         'grid_origin': grid_origin,
         'voxel_size': voxel_size,
     }
-    print(f"Saving tensor_data to: {args.output}")
+    print(f"Saving tensor_data to: {args.output} (encoded_2d_features shape: {encoded_2d.shape})")
     torch.save(out, args.output)
     print("Done.")
+    # Debug: print keys and shapes in saved tensor_data
+    loaded = torch.load(args.output, map_location='cpu')
+    print("Saved tensor_data.pt keys and shapes:")
+    for k, v in loaded.items():
+        if hasattr(v, 'shape'):
+            print(f"  {k}: shape={tuple(v.shape)}, dtype={v.dtype}")
+        else:
+            print(f"  {k}: {type(v)}, value={v}")
