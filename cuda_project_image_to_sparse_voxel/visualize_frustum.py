@@ -77,8 +77,8 @@ def visualize_frustum_and_voxels(tensor_data_path, occupancy_path, output_ply_pa
     else:
         # Fallback: use intrinsics and image size from tensor_data
         intrinsics = tensor_data['intrinsicParams'].squeeze().cpu().numpy()
-        img_height = tensor_data['encoded_2d_features'].shape[3]
-        img_width = tensor_data['encoded_2d_features'].shape[4]
+        img_height = tensor_data['encoded_2d_features'].shape[2]
+        img_width = tensor_data['encoded_2d_features'].shape[3]
         fx, fy, cx, cy = intrinsics[0], intrinsics[1], intrinsics[2], intrinsics[3]
         cam_pose = tensor_data['viewMatrixInv'].squeeze().cpu().numpy()
         R_c2w = cam_pose[:3, :3]

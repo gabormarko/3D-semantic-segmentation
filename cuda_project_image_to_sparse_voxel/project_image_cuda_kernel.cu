@@ -37,13 +37,38 @@ __device__ void traverseOccGridProjecter(const float *__restrict__ encoded_2d_fe
 
     //Find ray intersection
 #pragma unroll 1
+    int debug_printed = 0;
+    int thread_linear = blockIdx.x * gridDim.y * gridDim.z * blockDim.x * blockDim.y * blockDim.z
+                        + blockIdx.y * gridDim.z * blockDim.x * blockDim.y * blockDim.z
+                        + blockIdx.z * blockDim.x * blockDim.y * blockDim.z
+                        + threadIdx.x * blockDim.y * blockDim.z
+                        + threadIdx.y * blockDim.z
+                        + threadIdx.z;
     while (rayCurrent < rayEnd) {
         float3 currentPosWorld = worldCamPos + rayCurrent * worldDir;
         int3 pos = make_int3(currentPosWorld + make_float3(sign(currentPosWorld)) * 0.5f);
-        if (pos.x >= 0 && pos.y >= 0 && pos.z >= 0 && pos.x < dimx && pos.y < dimy && pos.z < dimz) {
-
+        // Project world point to camera
+        float3 cam = camDir * rayCurrent; // cam coordinates (approx)
+        // Compute (u, v) using intrinsics
+        float fx = params.getFx(dTid.w);
+        float fy = params.getFy(dTid.w);
+        float cx = params.getMx(dTid.w);
+        float cy = params.getMy(dTid.w);
+        float u = fx * (cam.x / cam.z) + cx;
+        float v = fy * (cam.y / cam.z) + cy;
+        int in_bounds = (u >= 0 && u < params.width && v >= 0 && v < params.height);
+        // Print for the first 10 threads
+        if (thread_linear < 10 && debug_printed == 0) {
+            printf("[CUDA DEBUG] [TID=%d] (u,v)=(%.1f,%.1f) world=(%.3f,%.3f,%.3f) cam=(%.3f,%.3f,%.3f) in_bounds=%d pos=(%d,%d,%d) occ_idx=%d\n",
+                thread_linear, u, v, currentPosWorld.x, currentPosWorld.y, currentPosWorld.z, cam.x, cam.y, cam.z, in_bounds, pos.x, pos.y, pos.z, occupied_index);
+            debug_printed = 1;
+        }
+        // Print for any in-bounds projection with nonzero occ_idx
+        if (in_bounds && pos.x >= 0 && pos.y >= 0 && pos.z >= 0 && pos.x < dimx && pos.y < dimy && pos.z < dimz) {
             occupied_index = occupancy_3D[dTid.w * dimz * dimy * dimx + pos.z * dimy * dimx + pos.y * dimx + pos.x];
             if (occupied_index != 0) {
+                printf("[CUDA DEBUG] [IN-BOUNDS] (u,v)=(%.1f,%.1f) world=(%.3f,%.3f,%.3f) cam=(%.3f,%.3f,%.3f) pos=(%d,%d,%d) occ_idx=%d\n",
+                    u, v, currentPosWorld.x, currentPosWorld.y, currentPosWorld.z, cam.x, cam.y, cam.z, pos.x, pos.y, pos.z, occupied_index);
                 feature_2d_starting_index = (dTid.w * params.view_num * params.height * params.width * feature_dim) +
                                             (dTid.z * params.height * params.width * feature_dim) +
                                             (dTid.y * params.width * feature_dim) + (dTid.x * feature_dim);
@@ -131,26 +156,99 @@ __global__ void project_features_cuda_forward_kernel(const float *__restrict__ e
     const int view = threadIdx.z;
 
     if (x < params.width && y < params.height && batch < params.batch_size && view < params.view_num) {
-
+        // Debug: select a specific pixel to trace the ray
+        bool debug_pixel = (x == 100 && y == 100 && batch == 0 && view == 0);
         // Copy the correct view matrix values
         int shift_index = (batch * params.view_num + view) * 16;
         const float4x4 curViewMatrixInv = *(float4x4 *) (viewMatrixInv + shift_index);
 
-        // Calculate ray directions
+        // Print kinectProjToCamera inputs and intrinsics for first 10 threads
+        int thread_linear = (blockIdx.x * gridDim.y * gridDim.z * blockDim.x * blockDim.y * blockDim.z
+            + blockIdx.y * gridDim.z * blockDim.x * blockDim.y * blockDim.z
+            + blockIdx.z * blockDim.x * blockDim.y * blockDim.z
+            + threadIdx.x * blockDim.y * blockDim.z
+            + threadIdx.y * blockDim.z
+            + threadIdx.z);
+        if (thread_linear < 10) {
+        if (debug_pixel) {
+            float mx = params.getMx(batch);
+            float my = params.getMy(batch);
+            float fx = params.getFx(batch);
+            float fy = params.getFy(batch);
+            printf("[DEBUG PIXEL] (x=%d, y=%d, batch=%d, view=%d) mx=%.3f my=%.3f fx=%.3f fy=%.3f\n", x, y, batch, view, mx, my, fx, fy);
+        }
+            float mx = params.getMx(batch);
+            float my = params.getMy(batch);
+            float fx = params.getFx(batch);
+            float fy = params.getFy(batch);
+            printf("[CUDA DEBUG] [TID=%d] kinectProjToCamera inputs: depthMin=%.3f depthMax=%.3f mx=%.3f my=%.3f fx=%.3f fy=%.3f x=%d y=%d scale=%.3f\n",
+                thread_linear, params.depthMin, params.depthMax, mx, my, fx, fy, x, y, 1.0f);
+            printf("[CUDA DEBUG] [TID=%d] Intrinsics: mx=%.3f my=%.3f fx=%.3f fy=%.3f (x=%d y=%d batch=%d view=%d)\n",
+                thread_linear, mx, my, fx, fy, x, y, batch, view);
+        }
+
         float3 camDir = normalize(
                 kinectProjToCamera(params.depthMin, params.depthMax, params.getMx(batch), params.getMy(batch),
                                    params.getFx(batch), params.getFy(batch), x, y, 1.0f));
+        if (debug_pixel) {
+            printf("[DEBUG PIXEL] camDir=(%.6f, %.6f, %.6f)\n", camDir.x, camDir.y, camDir.z);
+        }
+
+        // Print camDir for first 10 threads
+        if ((blockIdx.x * gridDim.y * gridDim.z * blockDim.x * blockDim.y * blockDim.z
+            + blockIdx.y * gridDim.z * blockDim.x * blockDim.y * blockDim.z
+            + blockIdx.z * blockDim.x * blockDim.y * blockDim.z
+            + threadIdx.x * blockDim.y * blockDim.z
+            + threadIdx.y * blockDim.z
+            + threadIdx.z) < 10) {
+            printf("[CUDA DEBUG] [TID=%d] camDir=(%.6f, %.6f, %.6f)\n",
+                (blockIdx.x * gridDim.y * gridDim.z * blockDim.x * blockDim.y * blockDim.z
+                + blockIdx.y * gridDim.z * blockDim.x * blockDim.y * blockDim.z
+                + blockIdx.z * blockDim.x * blockDim.y * blockDim.z
+                + threadIdx.x * blockDim.y * blockDim.z
+                + threadIdx.y * blockDim.z
+                + threadIdx.z),
+                camDir.x, camDir.y, camDir.z);
+        }
+
         float3 worldCamPos = curViewMatrixInv * make_float3(0.0f, 0.0f, 0.0f);
+        if (debug_pixel) {
+            printf("[DEBUG PIXEL] worldCamPos=(%.6f, %.6f, %.6f)\n", worldCamPos.x, worldCamPos.y, worldCamPos.z);
+        }
         float4 w = curViewMatrixInv * make_float4(camDir, 0.0f);
         float3 worldDir = normalize(make_float3(w.x, w.y, w.z));
 
+        // For the debug pixel, step through the ray and print each world position and voxel index
+        if (debug_pixel) {
+            const float depthToRayLength = 1.0f / camDir.z;
+            float rayCurrent = depthToRayLength * params.depthMin;
+            float rayEnd = depthToRayLength * params.depthMax;
+            int step = 0;
+            while (rayCurrent < rayEnd && step < 1000) {
+                float3 currentPosWorld = worldCamPos + rayCurrent * worldDir;
+                int3 pos = make_int3(currentPosWorld + make_float3(sign(currentPosWorld)) * 0.5f);
+                int in_bounds = (pos.x >= 0 && pos.y >= 0 && pos.z >= 0 && pos.x < dimx && pos.y < dimy && pos.z < dimz);
+                int occ_idx = -1;
+                if (in_bounds) {
+                    occ_idx = occupancy_3D[batch * dimz * dimy * dimx + pos.z * dimy * dimx + pos.y * dimx + pos.x];
+                }
+                printf("[DEBUG PIXEL] step=%d rayCurrent=%.4f world=(%.4f,%.4f,%.4f) voxel=(%d,%d,%d) in_bounds=%d occ_idx=%d\n",
+                    step, rayCurrent, currentPosWorld.x, currentPosWorld.y, currentPosWorld.z, pos.x, pos.y, pos.z, in_bounds, occ_idx);
+                if (occ_idx > 0) {
+                    printf("[DEBUG PIXEL] HIT OCCUPIED VOXEL at step=%d, occ_idx=%d\n", step, occ_idx);
+                    break; // Stop the debug ray loop after the first hit
+                }
+                rayCurrent += params.rayIncrement;
+                step++;
+            }
+        }
+        // Call the original function for all pixels
         traverseOccGridProjecter(encoded_2d_features, occupancy_3D,
                                  mapping2dto3d_num, projected_features,
                                  worldCamPos, worldDir, camDir,
                                  make_int4(x, y, view, batch), feature_dim,
                                  params,
                                  dimz, dimy, dimx);
-
     }
 }
 
@@ -202,7 +300,6 @@ void project_features_cuda_forward_impl(at::Tensor encoded_2d_features, // (batc
                                    at::Tensor pred_mode_t) // pred mode enables to use long predictions and pick the max value instead of averaging over all features
 {
     printf("Inside project_features_cuda_forward_impl\\n");
-    fflush(stdout);
     // Calculate projection sizes
     int batch_size = encoded_2d_features.size(0);
     int view_size = encoded_2d_features.size(1);

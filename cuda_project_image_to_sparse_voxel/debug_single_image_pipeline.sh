@@ -11,9 +11,28 @@ set -e
 
 IMG_NAME="DSC03423.JPG"
 FEATURE_NAME="DSC03423.JPG.npy"
-VOXEL_PLY="../output/minkowski_grid/officescene/officescene_minkowski_104515vox_iter50000_grid.ply"
-VOXEL_SIZE=0.05261439208984375
-GRID_ORIGIN="-1.4468932151794434 -2.05375599861145 -1.2992782592773438"
+VOXEL_PLY="/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/officescene/officescene_minkowski_9434vox_iter50000_grid.ply"
+
+# Extract VOXEL_SIZE and GRID_ORIGIN from the PLY file
+read VOXEL_SIZE GRID_ORIGIN <<< $(python3 -c "
+with open('$VOXEL_PLY', 'rb') as f:
+    voxel_size = None
+    grid_origin = None
+    for line in f:
+        try:
+            line = line.decode('ascii')
+        except:
+            break
+        if 'comment voxel_size' in line:
+            voxel_size = float(line.split()[-1])
+        if 'comment grid_origin' in line:
+            grid_origin = ' '.join(line.split()[-3:])
+        if 'end_header' in line:
+            break
+    print(voxel_size, grid_origin)
+")
+echo "[INFO] Using VOXEL_SIZE=$VOXEL_SIZE, GRID_ORIGIN=$GRID_ORIGIN"
+
 LSEG_DIR="../data/scannetpp/officescene/lseg_features"
 # DEBUG: Using unscaled camera parameters for the entire pipeline to bypass scaling issues.
 CAM_PARAMS="camera_params/camera_params.json"
@@ -21,7 +40,15 @@ CAM_PARAMS="camera_params/camera_params.json"
 # Set paths
 # COLMAP_SPARSE_DIR="../data/scannetpp/officescene/colmap/sparse/0"
 COLMAP_SPARSE_DIR="../data/scannetpp/officescene/sparse/0"
-VOXEL_GRID_PATH="../output/minkowski_grid/officescene/officescene_minkowski_104515vox_iter50000_grid.ply"
+VOXEL_GRID_PATH="/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/officescene/officescene_minkowski_9434vox_iter50000_grid.ply"
+
+### DUMMY VOXEL GRID:
+#VOXEL_PLY="/home/neural_fields/Unified-Lift-Gabor/cuda_project_image_to_sparse_voxel/dummy_occupancy_points_ascii.ply"
+#VOXEL_SIZE=1
+#GRID_ORIGIN="0 0 0"
+#VOXEL_GRID_PATH="/home/neural_fields/Unified-Lift-Gabor/cuda_project_image_to_sparse_voxel/dummy_occupancy_points_ascii.ply"
+###
+
 CAMERA_PARAMS_DIR="camera_params"
 
 # 1. Extract camera parameters

@@ -149,26 +149,14 @@ if __name__ == '__main__':
             if arr.shape[0] < 10:  # [C, H, W]
                 arr_torch = torch.from_numpy(arr).unsqueeze(0).float()  # [1, C, H, W]
             else:  # [H, W, C]
-                arr_torch = torch.from_numpy(arr).permute(2, 0, 1).unsqueeze(0).float()
+                arr_torch = torch.from_numpy(arr).permute(2, 0, 1).unsqueeze(0).float()  # [1, C, H, W]
             upsampled = torch.nn.functional.interpolate(
                 arr_torch, size=(orig_h, orig_w), mode='bilinear', align_corners=False
-            )
-            arr = upsampled.squeeze(0).cpu().numpy()
-            print(f"[DEBUG] Upsampled feature map shape for {base}: {arr.shape}")
-            # Print image size in (height x width) order for clarity
-            if arr.shape[0] < 10:
-                C, H_, W_ = arr.shape
-            else:
-                H_, W_, C = arr.shape
-            print(f"[DEBUG] Image size for frustum: {H_}x{W_} (height x width)")
-            if arr.shape[0] < 10:
-                C, H_, W_ = arr.shape
-            else:
-                H_, W_, C = arr.shape
-                arr = np.transpose(arr, (2, 0, 1))  # [C, H, W]
-            if H is None:
-                H, W, C = H_, W_, arr.shape[0]
-                print(f"Upsampled feature map to: {H}x{W}x{C}")
+            )  # [1, C, H, W]
+            arr = upsampled.squeeze(0).cpu().numpy()  # [C, H, W]
+            C, H_, W_ = arr.shape
+            print(f"[DEBUG] Upsampled feature map shape for {base}: {arr.shape} (C,H,W)")
+            print(f"[DEBUG] Image size for frustum/kernel: {H_}x{W_} (height x width)")
             feats_list.append(torch.from_numpy(arr).float())
         else:
             print(f"[DEBUG] No original image found for {base}, using feature shape as is: {arr.shape}")
@@ -177,9 +165,7 @@ if __name__ == '__main__':
             else:
                 H_, W_, C = arr.shape
                 arr = np.transpose(arr, (2, 0, 1))  # [C, H, W]
-            if H is None:
-                H, W, C = H_, W_, arr.shape[0]
-                print(f"Detected feature map size: {H}x{W}x{C}")
+            print(f"[DEBUG] Feature map shape used: {arr.shape} (C,H,W)")
             feats_list.append(torch.from_numpy(arr).float())
         # entry may be dict or str
         if isinstance(entry, dict):
@@ -214,6 +200,7 @@ if __name__ == '__main__':
     encoded_2d = torch.stack(feats_list, 0).unsqueeze(0)  # [1, V, C, H, W]
     # Convert to channels-last: [1, V, H, W, C]
     encoded_2d = encoded_2d.permute(0, 1, 3, 4, 2).contiguous()
+    print(f"[DEBUG] Final encoded_2d_features shape: {encoded_2d.shape} (should be [1, V, H, W, C])")
     intrinsicParams = torch.stack(intr_list, 0).unsqueeze(0)
     viewMatrixInv = torch.stack(ext_list, 0).unsqueeze(0)
     grid_origin = torch.tensor(args.grid_origin, dtype=torch.float32)

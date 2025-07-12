@@ -8,12 +8,106 @@ Usage:
 """
 import argparse
 import torch
+import numpy as np
 import os
 import project_features_cuda
 # Force synchronous kernel launches for easier backtraces
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--tensor_data', required=True,
+                        help='Path to tensor_data.pt with encoded_2d_features, occupancy_3D, intrinsicParams, viewMatrixInv, grid_origin, voxel_size.')
+    parser.add_argument('--output', default='proj_output.pt', help='Output path for projected_feats and counts.')
+    args = parser.parse_args()
+
+    assert os.path.isfile(args.tensor_data), f"tensor_data not found: {args.tensor_data}"
+    data = torch.load(args.tensor_data, map_location='cpu')
+    feats = data['encoded_2d_features']  # [1, V, H, W, C]
+    occ  = data['occupancy_3D']          # [Z, Y, X]
+    intr = data['intrinsicParams']       # [1, V, 4]
+    extr = data['viewMatrixInv']         # [1, V, 4, 4]
+    grid_origin = data['grid_origin']    # [3]
+    voxel_size  = data['voxel_size']
+
+    # Compute occ_indices for all debug projection code
+    occ_cpu = occ.cpu().numpy() if occ.dim() == 3 else occ[0].cpu().numpy()
+    occ_indices = (occ_cpu > 0).nonzero()
+
+    # Print upsampled feature tensor shape and image size
+    print("[DEBUG] Encoded 2D feature tensor shape:", feats.shape)
+    # Assume feats shape is [1, V, H, W, C]
+    _, _, H, W, _ = feats.shape
+    print(f"[DEBUG] Using image size from feature tensor: img_w={W}, img_h={H}")
+    img_w, img_h = W, H
+
+    # --- Extra debug: Project all occupied voxel centers and count in-bounds projections ---
+    print("\n[DEBUG] Projecting all occupied voxel centers to (u, v) and checking bounds:")
+    u_list, v_list = [], []
+    in_bounds = 0
+    in_bounds_indices = []
+    for i in range(len(occ_indices[0])):
+        z, y, x = occ_indices[0][i], occ_indices[1][i], occ_indices[2][i]
+        world = grid_origin.cpu().numpy() + voxel_size * np.array([x, y, z])
+        R = extr.cpu().numpy().reshape(4, 4)[:3, :3]
+        t = extr.cpu().numpy().reshape(4, 4)[:3, 3]
+        cam = np.dot(R.T, (world - t))
+        fx, fy, cx, cy = intr[0, 0, :].cpu().numpy()
+        if cam[2] > 0:
+            u = fx * (cam[0] / cam[2]) + cx
+            v = fy * (cam[1] / cam[2]) + cy
+            u_list.append(u)
+            v_list.append(v)
+            if 0 <= u < img_w and 0 <= v < img_h:
+                in_bounds += 1
+                in_bounds_indices.append(i)
+    if u_list:
+        print(f"u: min={np.min(u_list):.1f}, max={np.max(u_list):.1f}")
+        print(f"v: min={np.min(v_list):.1f}, max={np.max(v_list):.1f}")
+        print(f"Number of projected voxels in bounds: {in_bounds} / {len(u_list)}")
+    else:
+        print("No voxels projected in front of the camera.")
+
+    # Print a few in-bounds (u, v) projections for further debugging
+    if in_bounds > 0:
+        print("\n[DEBUG] A few in-bounds projected (u, v) coordinates:")
+        for idx in in_bounds_indices[:5]:
+            z, y, x = occ_indices[0][idx], occ_indices[1][idx], occ_indices[2][idx]
+            world = grid_origin.cpu().numpy() + voxel_size * np.array([x, y, z])
+            R = extr.cpu().numpy().reshape(4, 4)[:3, :3]
+            t = extr.cpu().numpy().reshape(4, 4)[:3, 3]
+            cam = np.dot(R.T, (world - t))
+            fx, fy, cx, cy = intr[0, 0, :].cpu().numpy()
+            u = fx * (cam[0] / cam[2]) + cx
+            v = fy * (cam[1] / cam[2]) + cy
+            print(f"Voxel (z={z}, y={y}, x={x}) world={world} -> cam={cam} -> (u,v)=({u:.1f},{v:.1f})")
+    else:
+        print("[DEBUG] No in-bounds projected voxels to show.")
+
+    # --- Extra debug: Project a few occupied voxel centers to (u, v) using the same math as the kernel ---
+    print("\n[DEBUG] Projecting a few occupied voxel centers to (u, v):")
+    occ_cpu = occ.cpu().numpy() if occ.dim() == 3 else occ[0].cpu().numpy()
+    occ_indices = (occ_cpu > 0).nonzero()
+    if len(occ_indices[0]) > 0:
+        # Use the first 5 occupied voxels
+        for i in range(min(5, len(occ_indices[0]))):
+            z, y, x = occ_indices[0][i], occ_indices[1][i], occ_indices[2][i]
+            # Convert to world coordinates
+            world = grid_origin.cpu().numpy() + voxel_size * np.array([x, y, z])
+            # Transform to camera coordinates
+            R = extr.cpu().numpy().reshape(4, 4)[:3, :3]
+            t = extr.cpu().numpy().reshape(4, 4)[:3, 3]
+            cam = np.dot(R.T, (world - t))
+            # Project to image plane
+            fx, fy, cx, cy = intr[0, 0, :].cpu().numpy()
+            if cam[2] > 0:
+                u = fx * (cam[0] / cam[2]) + cx
+                v = fy * (cam[1] / cam[2]) + cy
+                print(f"Voxel (z={z}, y={y}, x={x}) world={world} -> cam={cam} -> (u,v)=({u:.1f},{v:.1f})")
+            else:
+                print(f"Voxel (z={z}, y={y}, x={x}) world={world} projects behind camera (cam[2]={cam[2]:.3f})")
+    else:
+        print("No occupied voxels found for projection debug.")
     parser = argparse.ArgumentParser()
     parser.add_argument('--tensor_data', required=True,
                         help='Path to tensor_data.pt with encoded_2d_features, occupancy_3D, intrinsicParams, viewMatrixInv, grid_origin, voxel_size.')
@@ -69,7 +163,7 @@ def main():
     # build opts: [W, H, dmin, dmax, step]
     # Use correct dims for opts
     _, V, H, W, C = feats.shape
-    dmin, dmax = 0.0, 10.0
+    dmin, dmax = 0.01, 10.0  # Avoid zero to prevent projecting camera center
     step = voxel_size * 0.5
     opts = torch.tensor([W, H, dmin, dmax, step], dtype=torch.float32, device='cpu')
     pred_mode = torch.tensor([False], dtype=torch.bool, device='cpu')
@@ -93,6 +187,11 @@ def main():
     # assert extr.dim()==4  # Removed: extr is now 1D as required by the kernel
     assert opts.numel()==5
     assert pred_mode.numel()==1
+
+    # Print total number of rays launched
+    num_rays = feats.shape[0] * feats.shape[1] * feats.shape[2] * feats.shape[3]
+    print(f"[DEBUG] Total number of rays launched: {num_rays}")
+
     # run kernel
     print("Calling project_features_cuda...")
     project_features_cuda.project_features_cuda(
@@ -104,8 +203,27 @@ def main():
     print("Kernel done.")
 
     # Debug: print unique values and stats after kernel
-    print("mapping2dto3d unique values:", torch.unique(mapping2dto3d, return_counts=True))
+    unique_vals, counts = torch.unique(mapping2dto3d, return_counts=True)
+    print("mapping2dto3d unique values and counts:")
+    for val, cnt in zip(unique_vals.tolist(), counts.tolist()):
+        print(f"  value {val}: count {cnt}")
+
+    # Print all nonzero mapping2dto3d indices and their counts
+    nonzero_indices = (mapping2dto3d > 0).nonzero(as_tuple=True)[0]
+    if len(nonzero_indices) > 0:
+        print("\n[DEBUG] All nonzero mapping2dto3d indices and their counts:")
+        for idx in nonzero_indices.tolist():
+            print(f"  idx {idx}: count {mapping2dto3d[idx].item()}")
+    else:
+        print("[DEBUG] No nonzero voxels in mapping2dto3d.")
+
     print("proj_feats stats: min", proj_feats.min().item(), "max", proj_feats.max().item())
+    # Print a slice of projected_feats for manual inspection
+    if len(nonzero_indices) > 0:
+        idx = nonzero_indices[0].item()
+        print(f"First nonzero voxel idx: {idx}, projected_feats[{idx}, :10]:", proj_feats[idx, :10].cpu().numpy())
+    else:
+        print("No nonzero voxels in mapping2dto3d.")
 
     # move to cpu and save
     out = {
