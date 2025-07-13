@@ -74,18 +74,22 @@ python build_sparse_occupancy.py \
   --grid_origin $GRID_ORIGIN \
   --out_tensor occupancy.pt
 
-# 3. Prepare tensor data for a single image
+
+# 3. Prepare tensor data for a single image (only the selected feature file)
+TMP_LSEG_DIR=$(mktemp -d)
+cp "$LSEG_DIR/$FEATURE_NAME" "$TMP_LSEG_DIR/"
 python prepare_tensor_data.py \
-  --lseg_dir $LSEG_DIR \
+  --lseg_dir "$TMP_LSEG_DIR" \
   --scaled_camera_params $CAM_PARAMS \
   --occupancy occupancy.pt \
   --voxel_size $VOXEL_SIZE \
   --grid_origin $GRID_ORIGIN \
   --max_images 1 \
   --output tensor_data.pt
+rm -rf "$TMP_LSEG_DIR"
 
 # 4. Visualize occupancy and features
-python visualize_projection.py --occupancy occupancy.pt --tensor_data tensor_data.pt --show
+# python visualize_projection.py --occupancy occupancy.pt --tensor_data tensor_data.pt --show
 
 # 5. Run CUDA projection kernel for a single view
 python debug_project_features.py --tensor_data tensor_data.pt --output proj_output.pt
@@ -93,9 +97,9 @@ python debug_project_features.py --tensor_data tensor_data.pt --output proj_outp
 # 6. Visualize camera frustum and voxel grid
 echo "--- Step 6: Visualize camera frustum and voxel grid ---"
 python visualize_frustum.py \
-		--tensor_data "tensor_data.pt" \
-		--occupancy "occupancy.pt" \
-		--output_ply "combined_frustum_visualization.ply"
+        --tensor_data "tensor_data.pt" \
+        --occupancy "occupancy.pt" \
+        --output_ply "combined_frustum_visualization.ply"
 
 if [ $? -ne 0 ]; then
     echo "Frustum visualization failed."

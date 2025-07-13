@@ -77,8 +77,13 @@ for FEATURE_PATH in "$LSEG_DIR"/*.npy; do
     # 5. Run CUDA projection kernel for this view
     python debug_project_features.py --tensor_data "tensor_data/tensor_data_${IMG_NAME}.pt" --output "proj_output/proj_output_${IMG_NAME}.pt"
 
-    # remove large tensor data file to save space after output is created
+    # deleting per-image proj_output_*.pt files
     rm "tensor_data/tensor_data_${IMG_NAME}.pt"
+done
+
+echo "--- Aggregating voxel features and hit counts across all images ---"
+python aggregate_voxel_features.py
+echo "--- Aggregation complete. See average_voxel_features.pt and voxel_hit_counts.pt ---"
 done
 
 echo "--- Step 6: Visualize camera frustum and voxel grid (last image) ---"
