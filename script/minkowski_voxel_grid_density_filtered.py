@@ -10,10 +10,11 @@ import torch
 from scene import Scene, GaussianModel
 from arguments import ModelParams
 from utils.hash_grid import MinkowskiVoxelGrid
+from scipy.spatial import cKDTree
 
 def parse_args():
     import argparse
-    parser = argparse.ArgumentParser(description="Standalone MinkowskiEngine voxel grid generator")
+    parser = argparse.ArgumentParser(description="Standalone MinkowskiEngine voxel grid generator with density filtering")
     parser.add_argument("--model_path", required=True, help="Path to the model directory")
     parser.add_argument("--iteration", type=int, default=-1, help="Model iteration to load (-1 for latest)")
     parser.add_argument("--source_path", default="", help="Path to the source data")
@@ -25,7 +26,15 @@ def parse_args():
     parser.add_argument("--train_split", type=float, default=0.8, help="Training split ratio")
     parser.add_argument("--cell_size", type=float, default=0.05, help="Size of voxel grid cells")
     parser.add_argument("--output_dir", default="output/minkowski_grid", help="Output directory for visualizations")
+    parser.add_argument("--density_eps", type=float, default=0.05, help="Epsilon radius for density filtering")
+    parser.add_argument("--density_min_neighbors", type=int, default=10, help="Minimum neighbors for density filtering")
     return parser.parse_args()
+
+def filter_by_local_density(points, eps=0.1, min_neighbors=100):
+    tree = cKDTree(points)
+    counts = tree.query_ball_point(points, r=eps, return_length=True)
+    mask = counts > min_neighbors
+    return mask
 
 def main():
     args = parse_args()
@@ -39,7 +48,6 @@ def main():
     else:
         chkpnt_dir = os.path.join(args.model_path, "chkpnts")
         checkpoint_path = os.path.join(chkpnt_dir, f"iteration_{args.iteration}.pth")
-        
     import argparse
     model_parser = argparse.ArgumentParser()
     model_params = ModelParams(model_parser)
@@ -74,46 +82,51 @@ def main():
         surface_points = surface_points[mask]
         colors = colors[mask]
         print(f"Filtered to {surface_points.shape[0]} high-opacity points.")
-
+    # --- Density filtering ---
+    print(f"[INFO] Filtering by local density: eps={args.density_eps}, min_neighbors={args.density_min_neighbors}")
+    # CHANGE: Use numpy array for means
+    means = surface_points.detach().cpu().numpy() if torch.is_tensor(surface_points) else np.asarray(surface_points)
+    density_mask = filter_by_local_density(means, eps=args.density_eps, min_neighbors=args.density_min_neighbors)
+    filtered_points = means[density_mask]
+    filtered_colors = colors.cpu().numpy()[density_mask] if torch.is_tensor(colors) else colors[density_mask]
+    print(f"[INFO] Kept {filtered_points.shape[0]} / {means.shape[0]} gaussians after density filtering.")
     # --- Estimate voxel size for ~10,000 voxels ---
-    if torch.is_tensor(surface_points):
-        min_corner = surface_points.min(dim=0)[0]
-        max_corner = surface_points.max(dim=0)[0]
-        bbox = max_corner - min_corner
-        bbox_prod = bbox.prod().item()
-    else:
-        min_corner = np.min(surface_points, axis=0)
-        max_corner = np.max(surface_points, axis=0)
-        bbox = max_corner - min_corner
-        bbox_prod = np.prod(bbox)
-    target_voxels = 6000*1/2 # Adjusted target voxels for larger scenes
+    min_corner = np.min(filtered_points, axis=0)
+    max_corner = np.max(filtered_points, axis=0)
+    bbox = max_corner - min_corner
+    bbox_prod = np.prod(bbox)
+    target_voxels = 3800*1/2 # Adjusted target voxels for larger scenes *3800 works
     voxel_size = (bbox_prod / target_voxels)
-    print(f"Auto-tuned voxel size for ~{target_voxels} voxels: {voxel_size:.3f}")
-
-    if not isinstance(surface_points, torch.Tensor):
-        surface_points_tensor = torch.from_numpy(np.asarray(surface_points)).to(device)
-    else:
-        surface_points_tensor = surface_points.to(device)
-    if not isinstance(colors, torch.Tensor):
-        colors = torch.from_numpy(np.asarray(colors)).to(device)
-    else:
-        colors = colors.to(device)
+    print(f"Auto-tuned voxel size for ~{target_voxels} voxels: {voxel_size:.6f}")
+    # Debug print for grid center
+    grid_center = np.mean([min_corner, max_corner], axis=0)
+    print(f"[DEBUG] grid center: {grid_center}")
+    surface_points_tensor = torch.from_numpy(filtered_points).to(device)
+    colors_tensor = torch.from_numpy(filtered_colors).to(device)
     print(f"[DEBUG] surface_points_tensor type: {type(surface_points_tensor)}, device: {surface_points_tensor.device}")
-    print(f"[DEBUG] colors type: {type(colors)}, device: {colors.device}")
+    print(f"[DEBUG] colors_tensor type: {type(colors_tensor)}, device: {colors_tensor.device}")
     print(f"[DEBUG] surface_points_tensor shape: {surface_points_tensor.shape}")
-    print(f"[DEBUG] colors shape: {colors.shape}")
-    minkowski_grid = MinkowskiVoxelGrid(surface_points_tensor, colors=colors, voxel_size=voxel_size, device=device)
+    print(f"[DEBUG] colors_tensor shape: {colors_tensor.shape}")
+    minkowski_grid = MinkowskiVoxelGrid(surface_points_tensor, colors=colors_tensor, voxel_size=voxel_size, device=device)
     voxel_centers_raw = minkowski_grid.get_voxel_centers().detach().cpu().numpy()
     print(f"[DEBUG] voxel_centers_raw shape: {voxel_centers_raw.shape}")
+    # Debug print for actual voxel size if available
+    if hasattr(minkowski_grid, 'voxel_size'):
+        print(f"[DEBUG] MinkowskiVoxelGrid.voxel_size: {getattr(minkowski_grid, 'voxel_size', voxel_size)}")
+    else:
+        print(f"[DEBUG] Used voxel_size: {voxel_size}")
+    # Debug print for grid shape if available
+    grid_shape_dbg = None
+    if hasattr(minkowski_grid, 'grid_shape'):
+        grid_shape_dbg = getattr(minkowski_grid, 'grid_shape', None)
+        print(f"[DEBUG] grid_shape: {grid_shape_dbg}")
     scene_name = os.path.basename(os.path.normpath(args.model_path))
     minkowski_base = f"{scene_name}_minkowski_{len(minkowski_grid)}vox_iter{args.iteration}"
-    minkowski_points_path = os.path.join(args.output_dir, minkowski_base + "_points.ply")
-    minkowski_grid_path = os.path.join(args.output_dir, minkowski_base + "_grid.ply")
+    minkowski_points_path = os.path.join(args.output_dir, minkowski_base + "_filt_points.ply")
+    minkowski_grid_path = os.path.join(args.output_dir, minkowski_base + "_filt_grid.ply")
     import open3d as o3d
-    # Ensure voxel_centers is 2D, float64, and contiguous for Open3D
     voxel_centers = minkowski_grid.get_voxel_centers().detach().cpu().numpy()
     voxel_centers = np.asarray(voxel_centers)
-    # Robust shape handling
     if voxel_centers.ndim == 1:
         if voxel_centers.size == 0:
             print("[Warning] No voxel centers to export.")
@@ -144,12 +157,7 @@ def main():
     o3d.io.write_point_cloud(minkowski_points_path, pcd)
     print(f"Saved MinkowskiEngine voxel centers to {minkowski_points_path}")
     # Save voxel grid with header comments for voxel_size and grid_origin
-    # Compute grid_origin as the min_corner of the bounding box
-    if hasattr(min_corner, 'cpu'):
-        grid_origin = min_corner.detach().cpu().numpy()
-    else:
-        grid_origin = min_corner
-    # Write custom PLY header with comments
+    grid_origin = min_corner
     def write_ply_with_comments(filename, points, colors, voxel_size, grid_origin, grid_shape=None):
         with open(filename, 'wb') as f:
             header = (
@@ -168,14 +176,11 @@ def main():
                 f"end_header\n"
             )
             f.write(header.encode('utf-8'))
-            # Write binary data
             xyz = points.astype(np.float64)
             rgb = (np.clip(colors, 0, 1) * 255).astype(np.uint8)
             for i in range(xyz.shape[0]):
                 f.write(xyz[i].tobytes())
                 f.write(rgb[i].tobytes())
-
-    # Compute grid_shape if possible (from MinkowskiVoxelGrid)
     grid_shape = None
     if hasattr(minkowski_grid, 'grid_shape'):
         grid_shape = getattr(minkowski_grid, 'grid_shape', None)
@@ -183,7 +188,6 @@ def main():
             grid_shape = tuple(int(x) for x in grid_shape)
         else:
             grid_shape = None
-    # Save with custom header (including grid_shape if available)
     write_ply_with_comments(
         minkowski_grid_path,
         voxel_centers,
