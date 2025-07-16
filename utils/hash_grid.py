@@ -768,6 +768,16 @@ class MinkowskiVoxelGrid:
         self.coords = coords
         self.features = feats
 
+        # Compute grid shape and origin for header export
+        if coords.shape[0] > 0:
+            min_corner = coords.min(dim=0)[0]
+            max_corner = coords.max(dim=0)[0]
+            self.grid_shape = tuple((max_corner - min_corner + 1).tolist())
+            self.grid_origin = (min_corner * voxel_size).float().tolist()
+        else:
+            self.grid_shape = None
+            self.grid_origin = None
+
     def to(self, device):
         self.sparse_tensor = self.sparse_tensor.to(device)
         self.coords = self.coords.to(device)

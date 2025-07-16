@@ -63,14 +63,25 @@ def load_lseg_model(device):
 
 def extract_features(model, img_path, device):
     img = Image.open(img_path).convert('RGB')
+    # Resize shorter side to 480, keep aspect ratio
     transform = transforms.Compose([
-        transforms.Resize((480, 480)),
+        transforms.Resize(360),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
-    input_tensor = transform(img).unsqueeze(0).to(device)
+    tensor = transform(img)
+    _, h, w = tensor.shape
+    # Pad to multiples of 32
+    pad_h = (32 - h % 32) % 32
+    pad_w = (32 - w % 32) % 32
+    if pad_h > 0 or pad_w > 0:
+        tensor = torch.nn.functional.pad(tensor, (0, pad_w, 0, pad_h), mode='constant', value=0)
+    input_tensor = tensor.unsqueeze(0).to(device)
     with torch.no_grad():
         output = model(input_tensor)  # [1, C, H, W]
+    # Remove padding from output if any
+    if pad_h > 0 or pad_w > 0:
+        output = output[:, :, :h, :w]
     return output.cpu().numpy().squeeze(0)  # [C, H, W]
 
 def main(args):
