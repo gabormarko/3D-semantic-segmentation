@@ -28,6 +28,7 @@ def parse_args():
     parser.add_argument("--output_dir", default="output/minkowski_grid", help="Output directory for visualizations")
     parser.add_argument("--density_eps", type=float, default=0.05, help="Epsilon radius for density filtering")
     parser.add_argument("--density_min_neighbors", type=int, default=10, help="Minimum neighbors for density filtering")
+    parser.add_argument("--opacity_threshold", type=float, default=0.9, help="Minimum opacity for a gaussian to be considered part of the surface.")
     return parser.parse_args()
 
 def filter_by_local_density(points, eps=0.1, min_neighbors=100):
@@ -77,8 +78,10 @@ def main():
         colors = torch.ones_like(surface_points) * 0.5
     # --- Filter for dense surface regions (if available) ---
     if hasattr(gaussians, "get_opacity"):
+        print(f"[INFO] Original point count: {surface_points.shape[0]}")
+        print(f"[INFO] Filtering by opacity > {args.opacity_threshold}")
         opacity = gaussians.get_opacity
-        mask = (opacity > 0.9).squeeze()
+        mask = (opacity > args.opacity_threshold).squeeze()
         surface_points = surface_points[mask]
         colors = colors[mask]
         print(f"Filtered to {surface_points.shape[0]} high-opacity points.")
@@ -121,7 +124,7 @@ def main():
     scene_name = os.path.basename(os.path.normpath(args.model_path))
     
     # Create a more descriptive filename
-    params_str = f"_cell{args.cell_size}_eps{args.density_eps}_neig{args.density_min_neighbors}"
+    params_str = f"_opac{args.opacity_threshold}_cell{args.cell_size}_eps{args.density_eps}_neig{args.density_min_neighbors}"
     minkowski_base = f"{scene_name}_minkowski_{len(minkowski_grid)}vox_iter{args.iteration}{params_str}"
     
     minkowski_points_path = os.path.join(args.output_dir, minkowski_base + "_filt_points.ply")
