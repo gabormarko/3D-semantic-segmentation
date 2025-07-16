@@ -43,3 +43,10 @@ Thumbs.db
 Gaussian-Grouping/
 datasets/
 lang-seg/
+
+cuda_project_image_to_sparse_voxel/voxel_feature_checkpoints_vox6680/
+
+camera_params/
+configs/
+cuda-debug/
+cuda_project_clean/
