@@ -90,14 +90,12 @@ def main():
     filtered_points = means[density_mask]
     filtered_colors = colors.cpu().numpy()[density_mask] if torch.is_tensor(colors) else colors[density_mask]
     print(f"[INFO] Kept {filtered_points.shape[0]} / {means.shape[0]} gaussians after density filtering.")
-    # --- Estimate voxel size for ~10,000 voxels ---
+    # --- Set voxel size ---
     min_corner = np.min(filtered_points, axis=0)
     max_corner = np.max(filtered_points, axis=0)
-    bbox = max_corner - min_corner
-    bbox_prod = np.prod(bbox)
-    target_voxels = 3800*1/2 # Adjusted target voxels for larger scenes *3800 works
-    voxel_size = (bbox_prod / target_voxels)
-    print(f"Auto-tuned voxel size for ~{target_voxels} voxels: {voxel_size:.6f}")
+    voxel_size = args.cell_size
+    print(f"Using specified voxel size: {voxel_size:.6f}")
+
     # Debug print for grid center
     grid_center = np.mean([min_corner, max_corner], axis=0)
     print(f"[DEBUG] grid center: {grid_center}")
@@ -121,9 +119,13 @@ def main():
         grid_shape_dbg = getattr(minkowski_grid, 'grid_shape', None)
         print(f"[DEBUG] grid_shape: {grid_shape_dbg}")
     scene_name = os.path.basename(os.path.normpath(args.model_path))
-    minkowski_base = f"{scene_name}_minkowski_{len(minkowski_grid)}vox_iter{args.iteration}"
+    
+    # Create a more descriptive filename
+    params_str = f"_cell{args.cell_size}_eps{args.density_eps}_neig{args.density_min_neighbors}"
+    minkowski_base = f"{scene_name}_minkowski_{len(minkowski_grid)}vox_iter{args.iteration}{params_str}"
+    
     minkowski_points_path = os.path.join(args.output_dir, minkowski_base + "_filt_points.ply")
-    minkowski_grid_path = os.path.join(args.output_dir, minkowski_base + "_filt_grid.ply")
+    minkowski_grid_path = os.path.join(args.output_dir, minkowski_base + "_grid.ply")
     import open3d as o3d
     voxel_centers = minkowski_grid.get_voxel_centers().detach().cpu().numpy()
     voxel_centers = np.asarray(voxel_centers)
@@ -154,8 +156,8 @@ def main():
         pcd.colors = o3d.utility.Vector3dVector(np.clip(feats, 0, 1))
     else:
         pcd.colors = o3d.utility.Vector3dVector(np.ones_like(voxel_centers))
-    o3d.io.write_point_cloud(minkowski_points_path, pcd)
-    print(f"Saved MinkowskiEngine voxel centers to {minkowski_points_path}")
+    # o3d.io.write_point_cloud(minkowski_points_path, pcd)
+    # print(f"Saved MinkowskiEngine voxel centers to {minkowski_points_path}")
     # Save voxel grid with header comments for voxel_size and grid_origin
     grid_origin = min_corner
     def write_ply_with_comments(filename, points, colors, voxel_size, grid_origin, grid_shape=None):
