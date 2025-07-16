@@ -2,7 +2,7 @@
 unified_lift  /home/neural_fields/miniconda3/envs/unified_lift
 
 
-CHECK ENV:
+CHECK ENV: use (cuda)
 (unified_lift) neural_fields@VC04:~/Unified-Lift-Gabor$ python -c "import sys; import torch; print('Python version:', sys.version); print('Torch version:', torch.__version__); print('Torch CUDA version:', torch.version.cuda); print('CUDA available:', torch.cuda.is_available());" && gcc --version | head -n 1 | cut -d' ' -f3
 Python version: 3.8.20 (default, Oct  3 2024, 15:24:27) 
 [GCC 11.2.0]
