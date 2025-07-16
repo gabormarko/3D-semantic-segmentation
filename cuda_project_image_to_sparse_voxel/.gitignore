@@ -50,3 +50,9 @@ cuda_project_image_to_sparse_voxel/proj_output.pt
 cuda_project_image_to_sparse_voxel/occupancy.pt
 cuda_project_image_to_sparse_voxel/camera_params/camera_params.json
 cuda_project_image_to_sparse_voxel/camera_params/scaled_camera_params.json
+# Ignore generated data files
+*.pt
+*.json
+*.ply
+
+cuda_project_image_to_sparse_voxel/voxel_feature_checkpoints_vox6680/
