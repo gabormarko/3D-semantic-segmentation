@@ -30,6 +30,21 @@ def main():
     grid_origin = data['grid_origin']    # [3]
     voxel_size  = data['voxel_size']
 
+    # --- Build a reverse map from voxel ID to (z,y,x) coordinate ---
+    print("[DEBUG] Building reverse map from voxel ID to coordinate...")
+    occ_cpu = data['occupancy_3D'].cpu()
+    max_id_from_occ = int(occ_cpu.max().item())
+    id_to_zyx = torch.full((max_id_from_occ + 1, 3), -1, dtype=torch.long)
+    
+    nonzero_coords = occ_cpu.nonzero(as_tuple=False).long()
+    if nonzero_coords.numel() > 0:
+        nonzero_ids = occ_cpu[nonzero_coords[:, 0], nonzero_coords[:, 1], nonzero_coords[:, 2]].long()
+        id_to_zyx[nonzero_ids] = nonzero_coords
+        print(f"[DEBUG] Reverse map built for {len(nonzero_ids)} voxels with max ID {max_id_from_occ}.")
+    else:
+        print("[WARN] Occupancy grid is empty. No reverse map built.")
+
+
     # Compute occ_indices for all debug projection code
     occ_cpu = occ.cpu().numpy() if occ.dim() == 3 else occ[0].cpu().numpy()
     occ_indices = (occ_cpu > 0).nonzero()
@@ -108,20 +123,6 @@ def main():
                 print(f"Voxel (z={z}, y={y}, x={x}) world={world} projects behind camera (cam[2]={cam[2]:.3f})")
     else:
         print("No occupied voxels found for projection debug.")
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--tensor_data', required=True,
-                        help='Path to tensor_data.pt with encoded_2d_features, occupancy_3D, intrinsicParams, viewMatrixInv, grid_origin, voxel_size.')
-    parser.add_argument('--output', default='proj_output.pt', help='Output path for projected_feats and counts.')
-    args = parser.parse_args()
-
-    assert os.path.isfile(args.tensor_data), f"tensor_data not found: {args.tensor_data}"
-    data = torch.load(args.tensor_data, map_location='cpu')
-    feats = data['encoded_2d_features']  # [1, V, H, W, C]
-    occ  = data['occupancy_3D']          # [Z, Y, X]
-    intr = data['intrinsicParams']       # [1, V, 4]
-    extr = data['viewMatrixInv']         # [1, V, 4, 4]
-    grid_origin = data['grid_origin']    # [3]
-    voxel_size  = data['voxel_size']
 
     print("=== Loaded tensor_data ===")
     for name, t in [('feats', feats), ('occ', occ), ('intr', intr), ('extr', extr), ('grid_origin', grid_origin)]:
@@ -194,10 +195,15 @@ def main():
 
     # run kernel
     print("Calling project_features_cuda...")
+    # Ensure grid_origin is a 1D float32 CPU tensor
+    grid_origin_cpu = grid_origin.detach().cpu().contiguous().to(torch.float32).view(-1)
+    voxel_size_float = float(voxel_size)
     project_features_cuda.project_features_cuda(
         feats, occ, extr, intr,
         opts, mapping2dto3d, proj_feats,
-        pred_mode
+        pred_mode,
+        grid_origin_cpu,
+        voxel_size_float
     )
     torch.cuda.synchronize()
     print("Kernel done.")
@@ -205,18 +211,19 @@ def main():
     # Debug: print unique values and stats after kernel
     unique_vals, counts = torch.unique(mapping2dto3d, return_counts=True)
     print("mapping2dto3d unique values and counts:")
-    for val, cnt in zip(unique_vals.tolist(), counts.tolist()):
-        print(f"  value {val}: count {cnt}")
+    #for val, cnt in zip(unique_vals.tolist(), counts.tolist()):
+    #    print(f"  value {val}: count {cnt}")
 
     # Print all nonzero mapping2dto3d indices and their counts
     nonzero_indices = (mapping2dto3d > 0).nonzero(as_tuple=True)[0]
+    """
     if len(nonzero_indices) > 0:
         print("\n[DEBUG] All nonzero mapping2dto3d indices and their counts:")
         for idx in nonzero_indices.tolist():
             print(f"  idx {idx}: count {mapping2dto3d[idx].item()}")
     else:
         print("[DEBUG] No nonzero voxels in mapping2dto3d.")
-
+    """
     print("proj_feats stats: min", proj_feats.min().item(), "max", proj_feats.max().item())
     # Print a slice of projected_feats for manual inspection
     if len(nonzero_indices) > 0:
@@ -225,10 +232,26 @@ def main():
     else:
         print("No nonzero voxels in mapping2dto3d.")
 
-    # move to cpu and save
+
+    # Reconstruct 3D indices for all voxels using the pre-built map
+    nonzero_indices = (mapping2dto3d > 0).nonzero(as_tuple=True)[0]
+
+    # Use the map to get (z,y,x) coordinates for the hit voxel IDs
+    projected_indices = id_to_zyx[nonzero_indices.cpu()].int()
+    
+    # Also select the corresponding features
+    projected_feats = proj_feats[nonzero_indices].cpu()
+
+    # Filter out any invalid coordinates (where map had -1)
+    valid_coord_mask = (projected_indices[:, 0] != -1)
+    projected_indices = projected_indices[valid_coord_mask]
+    projected_feats = projected_feats[valid_coord_mask]
+
+
     out = {
         'mapping2dto3d_num': mapping2dto3d.cpu(),
-        'projected_feats': proj_feats.cpu(),
+        'projected_feats': projected_feats,
+        'projected_indices': projected_indices,
     }
     torch.save(out, args.output)
     print(f"Saved projection output to {args.output}")

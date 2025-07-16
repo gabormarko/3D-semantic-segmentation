@@ -15,7 +15,9 @@ void project_features_cuda_forward_impl(at::Tensor encoded_2d_features,
                                         at::Tensor opts,
                                         at::Tensor mapping2dto3d_num,
                                         at::Tensor projected_features,
-                                        at::Tensor pred_mode_t);
+                                        at::Tensor pred_mode_t,
+                                        at::Tensor grid_origin,      // <-- add this
+                                        float voxel_size);             // <-- add this);
 
 // C++ wrapper with input validation
 void project_features_cuda_forward(at::Tensor encoded_2d_features,
@@ -25,7 +27,10 @@ void project_features_cuda_forward(at::Tensor encoded_2d_features,
                                    at::Tensor opts,
                                    at::Tensor mapping2dto3d_num,
                                    at::Tensor projected_features,
-                                   at::Tensor pred_mode_t) 
+                                   at::Tensor pred_mode_t,
+                                   at::Tensor grid_origin,      // <-- add this
+                                   float voxel_size             // <-- add this
+                                ) 
 {
     std::cout << "Entering C++ wrapper: project_features_cuda_forward" << std::endl;
 
@@ -64,7 +69,9 @@ void project_features_cuda_forward(at::Tensor encoded_2d_features,
         opts,
         mapping2dto3d_num,
         projected_features,
-        pred_mode_t
+        pred_mode_t,
+        grid_origin,      // <-- add this
+        voxel_size        // <-- add this
     );
 }
 

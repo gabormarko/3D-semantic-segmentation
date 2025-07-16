@@ -82,6 +82,8 @@ namespace {
         float rayIncrement;
         int batch_size;
         int view_num;
+        float3 grid_origin;
+        float voxel_size;
 
         __device__ inline
         float getFx(int batch) const { return intrinsicsParams[batch*4 + 0]; }
