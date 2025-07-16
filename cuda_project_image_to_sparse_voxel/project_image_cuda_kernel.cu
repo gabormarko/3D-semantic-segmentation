@@ -172,7 +172,7 @@ __global__ void project_features_cuda_forward_kernel(const float *__restrict__ e
         bool debug_pixel = (x == cx && y == cy && batch == 0 && view == 0);
         // DEBUGADD END
 
-        // debug_pixel = 0; // Disable debug pixel tracing
+        debug_pixel = 0; // Disable debug pixel tracing
 
         // Copy the correct view matrix values
         int shift_index = (batch * params.view_num + view) * 16;
@@ -188,9 +188,10 @@ __global__ void project_features_cuda_forward_kernel(const float *__restrict__ e
         // DEBUGADD END
 
         // Debug: print for center pixel (principal point)
+        /*
         if (x == int(params.getMx(batch)) && y == int(params.getMy(batch)) && batch == 0 && view == 0) {
             printf("[CUDA DEBUG] CENTER PIXEL: camDir=(%.6f, %.6f, %.6f)\n", camDir.x, camDir.y, camDir.z);
-        }
+        }*/
         // Print kinectProjToCamera inputs and intrinsics for first 10 threads
         int thread_linear = (blockIdx.x * gridDim.y * gridDim.z * blockDim.x * blockDim.y * blockDim.z
             + blockIdx.y * gridDim.z * blockDim.x * blockDim.y * blockDim.z
@@ -256,7 +257,7 @@ __global__ void project_features_cuda_forward_kernel(const float *__restrict__ e
         // float3 camDir = normalize(
         //        kinectProjToCamera(params.depthMin, params.depthMax, params.getMx(batch), params.getMy(batch),
         //                           params.getFx(batch), params.getFy(batch), x, y, 1.0f));
-        
+        /*
         // Debug: print for center pixel (principal point)
         if (x == int(params.getMx(batch)) && y == int(params.getMy(batch)) && batch == 0 && view == 0) {
             printf("[CUDA DEBUG] CENTER PIXEL: camDir=(%.6f, %.6f, %.6f)\n", camDir.x, camDir.y, camDir.z);
@@ -277,13 +278,13 @@ __global__ void project_features_cuda_forward_kernel(const float *__restrict__ e
                 + threadIdx.y * blockDim.z
                 + threadIdx.z),
                 camDir.x, camDir.y, camDir.z);
-        }
+        }*/
 
 
         //float3 worldCamPos = curViewMatrixInv * make_float3(0.0f, 0.0f, 0.0f);
         //float4 w = curViewMatrixInv * make_float4(camDir, 0.0f);
         //float3 worldDir = normalize(make_float3(w.x, w.y, w.z));
-
+        /*
         // Debug: print for center pixel (principal point)
         if (x == int(params.getMx(batch)) && y == int(params.getMy(batch)) && batch == 0 && view == 0) {
             printf("[CUDA DEBUG] CENTER PIXEL: worldDir=(%.6f, %.6f, %.6f)\n", worldDir.x, worldDir.y, worldDir.z);
@@ -294,7 +295,7 @@ __global__ void project_features_cuda_forward_kernel(const float *__restrict__ e
             printf("%.6f %.6f %.6f %.6f\n", curViewMatrixInv.m21, curViewMatrixInv.m22, curViewMatrixInv.m23, curViewMatrixInv.m24);
             printf("%.6f %.6f %.6f %.6f\n", curViewMatrixInv.m31, curViewMatrixInv.m32, curViewMatrixInv.m33, curViewMatrixInv.m34);
             printf("%.6f %.6f %.6f %.6f\n", curViewMatrixInv.m41, curViewMatrixInv.m42, curViewMatrixInv.m43, curViewMatrixInv.m44);
-        }
+        }*/
 
         // For the debug pixel, step through the ray and print each world position and voxel index
         if (debug_pixel) {
@@ -412,7 +413,7 @@ void project_features_cuda_forward_impl(
     params.grid_origin = make_float3(grid_origin_acc[0], grid_origin_acc[1], grid_origin_acc[2]);
     params.voxel_size = voxel_size;
     // voxel_size_loc is only used for projected_features.size(0), not for params.voxel_size
-
+    /*
     // DEBUGADD
     printf("[CUDA DEBUG] (kernel launch) grid_shape: (dimz=%d, dimy=%d, dimx=%d) [order: z, y, x]\n", dim_z, dim_y, dim_x);
     // Print grid origin and voxel size as passed from Python
@@ -421,7 +422,7 @@ void project_features_cuda_forward_impl(
     printf("[CUDA DEBUG] (kernel launch) Convention: world = [x, y, z] * voxel_size + grid_origin\n");
     printf("[CUDA DEBUG] (kernel launch) Convention: voxel = round((world - grid_origin) / voxel_size) -> (x, y, z)\n");
     // DEBUGADD END
-
+    */
     // get pred mode
     at::Tensor pred_mode_cpu = pred_mode_t.to(at::kCPU);
     auto pred_mode_accessor = pred_mode_cpu.accessor<bool, 1>();

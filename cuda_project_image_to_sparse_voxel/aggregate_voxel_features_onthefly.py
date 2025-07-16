@@ -14,14 +14,14 @@ parser.add_argument('--first_only', action='store_true', help='Only process the 
 args = parser.parse_args()
 
 # Create output directory for checkpoints and final outputs
-CHECKPOINT_DIR = "voxel_feature_checkpoints_vox6680"
+CHECKPOINT_DIR = "voxel_feature_checkpoints_vox41759"
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
 # Paths and config
 LSEG_DIR = "../data/scannetpp/officescene/lseg_features"
 CAM_PARAMS = "camera_params/camera_params.json"
 OCCUPANCY = "ALL_occupancy.pt"
-VOXEL_PLY = "/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/officescene_filtered/officescene_minkowski_6680vox_iter50000_filt_grid.ply"
+VOXEL_PLY = "/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/officescene_filtered/officescene_minkowski_41759vox_iter50000_cell0.05_eps0.05_neig12_grid.ply"
 TENSOR_DATA_TMP = "tensor_data/tmp_tensor_data.pt"
 
 # Extract voxel size and grid origin from the PLY file (as in bash script)
@@ -137,6 +137,7 @@ try:
             o3d.io.write_point_cloud(ply_path, pcd, write_ascii=True)
             print(f"[DEBUG] Saved initial occupied voxels as: {ply_path} ({occupied_world.shape[0]} points)")
 
+            """ DEBUG TESTS
             # --- EXTRA DEBUG: Print grid/voxel conventions ---
             print("[DEBUG] PYTHON GRID CONVENTION:")
             print(f"  occ_grid shape: {occ_grid.shape} (z, y, x)")
@@ -152,7 +153,7 @@ try:
                 world = np.array([x, y, z]) * voxel_size + grid_origin
                 print(f"  Voxel (z={z}, y={y}, x={x}) -> world: {world}")
                 print(f"    Occupancy value: {occ_grid[z, y, x].item()}")
-
+            
             # Test: Map camera center to voxel index and print occupancy
             # (Assume camera center is available from previous debug, else set manually)
             cam_center = np.array([0.80659677, 0.97706404, 1.61907633])
@@ -175,7 +176,7 @@ try:
                     print(f", occupancy={occ_grid[z, y, x].item()}")
                 else:
                     print(", out of bounds!")
-
+            """
         else:
             print("[DEBUG] OCCUPANCY file found but no 3D occupancy grid present.")
     else:
@@ -188,13 +189,14 @@ except ImportError:
 for fpath in feature_files:
     img_name = os.path.basename(fpath)[:-4]
     print(f"\n[INFO] Processing {img_name} ...")
-    print(f"[DEBUG] Feature file: {fpath}")
-    print(f"[DEBUG] Using camera params for image: {img_name}")
+    #print(f"[DEBUG] Feature file: {fpath}")
+    #print(f"[DEBUG] Using camera params for image: {img_name}")
     with tempfile.TemporaryDirectory() as tmpdir:
         shutil.copy(fpath, tmpdir)
         cam_params_dst = os.path.join(tmpdir, os.path.basename(CAM_PARAMS))
         shutil.copy(CAM_PARAMS, cam_params_dst)
         # --- Print all relevant parameters before CUDA call ---
+        """
         print("\n[PYTHON DEBUG] Parameters passed to CUDA kernel:")
         # Load tensor_data for direct access
         tensor_data = torch.load(TENSOR_DATA_TMP, map_location='cpu') if os.path.exists(TENSOR_DATA_TMP) else None
@@ -213,12 +215,7 @@ for fpath in feature_files:
             print(f"  voxel_size: {voxel_size}")
         else:
             print("  [WARN] tensor_data not found for CUDA debug printout!")
-        print(f"  OCCUPANCY file: {OCCUPANCY}")
-        print(f"  VOXEL_PLY: {VOXEL_PLY}")
-        print(f"  Image name: {img_name}")
-        print(f"  Feature file: {fpath}")
-        print(f"  Camera params file: {cam_params_dst}")
-        print(f"  CUDA opts: width/height/depth_min/depth_max/ray_increment will be set in debug_project_features.py")
+        """
         # --- End debug printout ---
         subprocess.run([
             'python', 'prepare_tensor_data.py',
@@ -230,6 +227,27 @@ for fpath in feature_files:
             '--max_images', '1',
             '--output', TENSOR_DATA_TMP
         ], check=True)
+
+        # --- [FIXED] Moved debug printout to after file creation ---
+        print("\n[PYTHON DEBUG] Parameters passed to CUDA kernel:")
+        if os.path.exists(TENSOR_DATA_TMP) and os.path.getsize(TENSOR_DATA_TMP) > 0:
+            tensor_data = torch.load(TENSOR_DATA_TMP, map_location='cpu')
+            feats = tensor_data.get('encoded_2d_features', None)
+            occ = tensor_data.get('occupancy_3D', None)
+            intr = tensor_data.get('intrinsicParams', None)
+            extr = tensor_data.get('viewMatrixInv', None)
+            grid_origin = tensor_data.get('grid_origin', None)
+            voxel_size = tensor_data.get('voxel_size', None)
+            print(f"  encoded_2d_features shape: {feats.shape if feats is not None else None}")
+            print(f"  occupancy_3D shape: {occ.shape if occ is not None else None}")
+            print(f"  intrinsicParams: {intr[0,0].tolist() if intr is not None else None}")
+            print(f"  viewMatrixInv (first view):\n{extr[0,0] if extr is not None else None}")
+            print(f"  grid_origin: {grid_origin}")
+            print(f"  voxel_size: {voxel_size}")
+        else:
+            print(f"  [WARN] {TENSOR_DATA_TMP} not found or is empty. Cannot print CUDA debug info.")
+        # --- End debug printout ---
+
         subprocess.run([
             'python', 'debug_project_features.py',
             '--tensor_data', TENSOR_DATA_TMP,
@@ -246,11 +264,13 @@ for fpath in feature_files:
             print(f"[ERROR] No features projected for {img_name}!")
         if torch.isnan(feats).any() or torch.isinf(feats).any():
             print(f"[ERROR] NaN or Inf detected in projected features for {img_name}")
+        """
         # Debug: print a few voxel index to world mappings
         for i in range(min(5, indices.shape[0])):
             idx = indices[i].tolist()
             world = np.array([idx[2], idx[1], idx[0]]) * VOXEL_SIZE + np.array(GRID_ORIGIN)
             print(f"[DEBUG] Voxel idx (z={idx[0]}, y={idx[1]}, x={idx[2]}) -> world: {world}")
+        """
         if feat_dim is None:
             feat_dim = feats.shape[1]
         if 'mapping2dto3d' in output_dict:
@@ -269,24 +289,8 @@ for fpath in feature_files:
         os.remove(TENSOR_DATA_TMP)
         os.remove('proj_output.pt')
 
-
-    # Try to extract grid shape from PLY header (function moved up to avoid NameError)
-    def extract_grid_shape(ply_path):
-        with open(ply_path, 'rb') as f:
-            for line in f:
-                try:
-                    line = line.decode('ascii')
-                except:
-                    break
-                if 'comment grid_shape' in line:
-                    return tuple(int(x) for x in line.split()[-3:])
-                if 'end_header' in line:
-                    break
-        return None
-
-
     idx = feature_files.index(fpath) + 1
-    if idx % 20 == 0:
+    if idx % 50 == 0:
         # Save checkpoint: average features and hit counts for all occupied voxels
         avg_feats_dict = {}
         for k, v in voxel_feature_sum.items():
@@ -326,7 +330,7 @@ for fpath in feature_files:
             # Swap Y and Z axes to match camera coordinate system
             #print("[DEBUG] Swapping Y and Z axes of world coordinates for visualization.")
             # world_xyz = world_xyz_orig[:, [0, 2, 1]]
-
+            """
             # Debug: print a few mappings from (z, y, x) to world coordinates
             print("[DEBUG] First 5 voxel index mappings (z, y, x) -> world_xyz:")
             for i in range(min(5, len(occupied_keys))):
@@ -336,6 +340,7 @@ for fpath in feature_files:
             print("[DEBUG] world_xyz axis ranges:")
             for axis, name in enumerate(['x', 'y', 'z']):
                 print(f"  {name}: min={world_xyz[:, axis].min():.3f}, max={world_xyz[:, axis].max():.3f}")
+            """
             # Use pink color for all hit voxels
             colors = np.tile(np.array([255, 0, 255], dtype=np.uint8), (world_xyz.shape[0], 1))
             # Save as Open3D point cloud for robust PLY export
@@ -374,10 +379,12 @@ for fpath in feature_files:
                 ], dtype=np.float32)
                 cam_center = -(R.T @ tvec)
                 view_dir = R.T @ np.array([0, 0, 1], dtype=np.float32)  # camera z axis in world
+                """
                 print("[PYTHON DEBUG] Intrinsics: fx=%.6f fy=%.6f cx=%.6f cy=%.6f" % (cam_params['cameras']['1']['params'][0], cam_params['cameras']['1']['params'][1], cam_params['cameras']['1']['params'][2], cam_params['cameras']['1']['params'][3]))
                 print("[PYTHON DEBUG] Extrinsic (R|t):")
                 print(R)
                 print(tvec)
+                """
             else:
                 # Fallback: use extrinsic from tensor_data.pt
                 tensor_data = torch.load(TENSOR_DATA_TMP, map_location='cpu') if os.path.exists(TENSOR_DATA_TMP) else None
@@ -391,20 +398,21 @@ for fpath in feature_files:
                         extr = extr        # [4,4]
                     cam_center = extr[:3, 3].cpu().numpy()
                     view_dir = extr[:3, 2].cpu().numpy()  # third column is camera z axis in world
+                    """
                     print("[PYTHON DEBUG] Intrinsics: unknown (using tensor_data)")
                     print("[PYTHON DEBUG] Extrinsic (viewMatrixInv):")
                     print(extr)
+                    """
         except Exception as e:
             print(f"[WARN] Could not extract camera center: {e}")
             cam_center = np.zeros(3)
             view_dir = np.array([0, 0, 1], dtype=np.float32)
 
-
+        """
         # Print debug info
-
-
         print(f"[PYTHON DEBUG] Camera center: {cam_center}")
         print(f"[PYTHON DEBUG] View direction (world): {view_dir}")
+        """
         if len(occupied_keys) == 0:
             print(f"[PYTHON DEBUG] No occupied voxels, skipping world_xyz debug and visualization.")
             # --- Extra debug: visualize camera, frustum, and a few rays ---
@@ -499,18 +507,19 @@ for fpath in feature_files:
             except Exception as e:
                 print(f"[DEBUG] Could not save camera/ray/frustum/voxel visualization: {e}")
         else:
-            print(f"[PYTHON DEBUG] First 5 voxel world coords: {world_xyz[:5]}")
+            # print(f"[PYTHON DEBUG] First 5 voxel world coords: {world_xyz[:5]}")
 
             # Compute and print mean direction from camera to voxels
             mean_voxel = world_xyz.mean(axis=0)
             mean_dir = mean_voxel - cam_center
             mean_dir_norm = mean_dir / (np.linalg.norm(mean_dir) + 1e-8)
             dot = np.dot(view_dir / (np.linalg.norm(view_dir) + 1e-8), mean_dir_norm)
-            print(f"[DEBUG] Mean direction from camera to voxels: {mean_dir_norm}")
-            print(f"[DEBUG] Dot product (view_dir · mean_dir_norm): {dot}")
+            #print(f"[DEBUG] Mean direction from camera to voxels: {mean_dir_norm}")
+            #print(f"[DEBUG] Dot product (view_dir · mean_dir_norm): {dot}")
             if dot < 0.5:
                 print(f"[WARNING] Camera may not be facing the voxels!")
 
+            """
             # Write PLY with rays as edges and a view direction arrow
             ply_path = os.path.join(CHECKPOINT_DIR, f'nonzero_voxels_hitcount_{idx}_rays.ply')
             num_points = world_xyz.shape[0]
@@ -541,7 +550,7 @@ for fpath in feature_files:
                 # Write view direction arrow (last-1 to last vertex)
                 f.write(f'{num_points} {num_points+1} 0 0 255\n')  # blue arrow
             print(f"[PLY] Saved nonzero voxels, rays, and view direction as: {ply_path}")
-
+            """
 
 # Save final average features and hit counts for all occupied voxels
 
@@ -576,7 +585,7 @@ else:
     # Swap Y and Z axes to match camera coordinate system
     #print("[DEBUG] Swapping Y and Z axes of final world coordinates.")
     #world_xyz = world_xyz_orig[:, [0, 2, 1]]
-
+    """
     # Debug: print a few mappings from (z, y, x) to world coordinates
     print("[DEBUG] First 5 voxel index mappings (z, y, x) -> world_xyz:")
     for i in range(min(5, len(occupied_keys))):
@@ -587,6 +596,7 @@ else:
     print("[DEBUG] world_xyz axis ranges:")
     for axis, name in enumerate(['x', 'y', 'z']):
         print(f"  {name}: min={world_xyz[:, axis].min():.3f}, max={world_xyz[:, axis].max():.3f}")
+    """
     # Save as .ply for visualization
     ply_path = os.path.join(CHECKPOINT_DIR, 'nonzero_voxels_with_features.ply')
     with open(ply_path, 'w') as f:
