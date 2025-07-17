@@ -38,7 +38,7 @@ def load_gaussians_from_checkpoint(checkpoint_path, sh_degree=3):
     gaussians.restore(model_params, dummy_args)
     return gaussians
 
-def export_gaussians_to_ply(gaussians, output_ply):
+def export_gaussians_to_ply(gaussians, output_ply, opacity_threshold=None):
     xyz = gaussians.get_xyz.detach().cpu().numpy()
     if hasattr(gaussians, "get_features_dc"):
         colors = gaussians.get_features_dc.detach().cpu().numpy()
@@ -49,6 +49,18 @@ def export_gaussians_to_ply(gaussians, output_ply):
     else:
         print("Warning: No DC color found. Exported points will be gray.")
         colors = np.ones_like(xyz) * 0.5
+
+    if opacity_threshold is not None:
+        if hasattr(gaussians, "get_opacity"):
+            opacity = gaussians.get_opacity.detach().cpu().numpy().squeeze()
+            mask = opacity >= opacity_threshold
+            n_before = xyz.shape[0]
+            xyz = xyz[mask]
+            colors = colors[mask]
+            print(f"Filtered {np.sum(mask)} / {n_before} Gaussians with opacity >= {opacity_threshold}")
+        else:
+            print("Warning: gaussians has no get_opacity attribute. No opacity filtering applied.")
+
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(xyz)
     pcd.colors = o3d.utility.Vector3dVector(colors)
