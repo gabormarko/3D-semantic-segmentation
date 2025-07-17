@@ -18,7 +18,7 @@ CHECKPOINT_DIR = "voxel_feature_checkpoints_vox41759"
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
 # Paths and config
-LSEG_DIR = "../data/scannetpp/officescene/lseg_features"
+LSEG_DIR = "/home/neural_fields/Unified-Lift-Gabor/data/scannetpp/officescene/lseg_embed_features/features"
 CAM_PARAMS = "camera_params/camera_params.json"
 OCCUPANCY = "ALL_occupancy.pt"
 VOXEL_PLY = "/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/officescene_filtered/officescene_minkowski_41759vox_iter50000_cell0.05_eps0.05_neig12_grid.ply"
@@ -71,7 +71,6 @@ else:
     NUM_VOXELS = 'unknown'
 print(f"[INFO] Using VOXEL_SIZE={VOXEL_SIZE}, GRID_ORIGIN={GRID_ORIGIN}, GRID_SHAPE={GRID_SHAPE}, NUM_VOXELS={NUM_VOXELS}")
 
-# Find all LSEG feature files
 feature_files = sorted(glob.glob(os.path.join(LSEG_DIR, '*.npy')))
 if not feature_files:
     raise RuntimeError(f"No .npy feature files found in {LSEG_DIR}")
@@ -189,6 +188,7 @@ except ImportError:
 for fpath in feature_files:
     img_name = os.path.basename(fpath)[:-4]
     print(f"\n[INFO] Processing {img_name} ...")
+    
     #print(f"[DEBUG] Feature file: {fpath}")
     #print(f"[DEBUG] Using camera params for image: {img_name}")
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -358,13 +358,13 @@ for fpath in feature_files:
 
         import json
         cam_params_path = CAM_PARAMS
-        image_name = img_name + '.JPG' if not img_name.lower().endswith('.jpg') else img_name
+        # The feature file's base name (img_name) should match the camera param entry's 'name' field (including extension)
         try:
             with open(cam_params_path, 'r') as f:
                 cam_params = json.load(f)
             img_entry = None
             for v in cam_params.get('images', {}).values():
-                if v['name'] == image_name:
+                if v['name'] == img_name:
                     img_entry = v
                     break
             if img_entry is not None:
@@ -428,7 +428,7 @@ for fpath in feature_files:
                 # Use feature tensor shape if available
                 if 'images' in cam_params and len(cam_params['images']) > 0:
                     for v in cam_params['images'].values():
-                        if v['name'] == image_name:
+                        if v['name'] == img_name:
                             img_w = v.get('width', img_w)
                             img_h = v.get('height', img_h)
                             break

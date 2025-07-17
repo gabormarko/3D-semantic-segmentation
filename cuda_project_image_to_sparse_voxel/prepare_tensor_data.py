@@ -145,11 +145,8 @@ if __name__ == '__main__':
             orig_img = Image.open(orig_img_path)
             orig_w, orig_h = orig_img.size  # PIL: (width, height)
             print(f"[DEBUG] Original image size for {base}: {orig_h}x{orig_w} (height x width)")
-            # arr: [C, H, W] or [H, W, C]
-            if arr.shape[0] < 10:  # [C, H, W]
-                arr_torch = torch.from_numpy(arr).unsqueeze(0).float()  # [1, C, H, W]
-            else:  # [H, W, C]
-                arr_torch = torch.from_numpy(arr).permute(2, 0, 1).unsqueeze(0).float()  # [1, C, H, W]
+            # Always treat arr as [C, H, W] (512, 192, 272)
+            arr_torch = torch.from_numpy(arr).unsqueeze(0).float()  # [1, C, H, W]
             upsampled = torch.nn.functional.interpolate(
                 arr_torch, size=(orig_h, orig_w), mode='bilinear', align_corners=False
             )  # [1, C, H, W]
@@ -160,11 +157,8 @@ if __name__ == '__main__':
             feats_list.append(torch.from_numpy(arr).float())
         else:
             print(f"[DEBUG] No original image found for {base}, using feature shape as is: {arr.shape}")
-            if arr.shape[0] < 10:
-                C, H_, W_ = arr.shape
-            else:
-                H_, W_, C = arr.shape
-                arr = np.transpose(arr, (2, 0, 1))  # [C, H, W]
+            # Always treat arr as [C, H, W] (512, 192, 272)
+            C, H_, W_ = arr.shape
             print(f"[DEBUG] Feature map shape used: {arr.shape} (C,H,W)")
             feats_list.append(torch.from_numpy(arr).float())
         # entry may be dict or str
