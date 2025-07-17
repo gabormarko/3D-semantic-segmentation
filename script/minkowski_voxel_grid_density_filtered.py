@@ -85,6 +85,19 @@ def main():
         surface_points = surface_points[mask]
         colors = colors[mask]
         print(f"Filtered to {surface_points.shape[0]} high-opacity points.")
+        # Export filtered high-opacity points as PLY
+        import open3d as o3d
+        high_op_ply_path = os.path.join(args.output_dir, f"high_opacity_points_opac{args.opacity_threshold}_iter{args.iteration}.ply")
+        points_np = surface_points.detach().cpu().numpy() if torch.is_tensor(surface_points) else np.asarray(surface_points)
+        colors_np = colors.detach().cpu().numpy() if torch.is_tensor(colors) else np.asarray(colors)
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points_np)
+        if colors_np.shape[1] == 3:
+            pcd.colors = o3d.utility.Vector3dVector(np.clip(colors_np, 0, 1))
+        else:
+            pcd.colors = o3d.utility.Vector3dVector(np.ones_like(points_np))
+        o3d.io.write_point_cloud(high_op_ply_path, pcd, write_ascii=True)
+        print(f"[INFO] Saved high-opacity points to {high_op_ply_path}")
     # --- Density filtering ---
     print(f"[INFO] Filtering by local density: eps={args.density_eps}, min_neighbors={args.density_min_neighbors}")
     # CHANGE: Use numpy array for means
