@@ -51,3 +51,5 @@ configs/
 cuda-debug/
 cuda_project_clean/
 
+cuda_project_image_to_sparse_voxel/vis_open_voc/
+cuda_project_image_to_sparse_voxel/voxel_feature_checkpoints_vox41759/

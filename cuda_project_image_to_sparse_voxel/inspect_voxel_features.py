@@ -3,7 +3,7 @@ import numpy as np
 
 import argparse
 
-VOXEL_PLY = "/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/officescene_filtered/officescene_minkowski_6680vox_iter50000_filt_grid.ply"
+VOXEL_PLY = "/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/officescene_filtered/officescene_minkowski_41759vox_iter50000_cell0.05_eps0.05_neig12_grid.ply"
 
 def main():
 
