@@ -5,7 +5,7 @@ import numpy as np
 import os
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--input_file', type=str, required=True, help='Path to checkpoint .pt file or raw hit_count tensor file.')
+parser.add_argument('--input_file', type=str, default='/home/neural_fields/Unified-Lift-Gabor/cuda_project_image_to_sparse_voxel/voxel_feature_checkpoints_vox41759/ALL_nonzero_voxel_features_232.pt', help='Path to checkpoint .pt file or raw hit_count tensor file.')
 parser.add_argument('--topk', type=int, default=10, help='Number of top-hit voxels to display.')
 args = parser.parse_args()
 
