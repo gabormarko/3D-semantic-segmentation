@@ -196,7 +196,7 @@ else:
         np.array([k[2], k[1], k[0]]) * VOXEL_SIZE + np.array([GRID_ORIGIN[0], GRID_ORIGIN[1], GRID_ORIGIN[2]])
         for k in occupied_keys
     ], dtype=np.float32)
-    ply_path = os.path.join(CHECKPOINT_DIR, 'nonzero_voxels_with_colors.ply')
+    ply_path = os.path.join(CHECKPOINT_DIR, f'ALL_nonzero_voxels_with_colors_{idx}_vox{NUM_VOXELS}.ply')
     with open(ply_path, 'w') as f:
         f.write('ply\nformat ascii 1.0\n')
         f.write(f'element vertex {world_xyz.shape[0]}\n')
@@ -209,7 +209,7 @@ else:
             line = f'{pt[0]} {pt[1]} {pt[2]} {rgb[0]} {rgb[1]} {rgb[2]}'
             f.write(line + '\n')
     print(f"[PLY] Saved nonzero voxels with colors as: {ply_path}")
-    save_path = os.path.join(CHECKPOINT_DIR, f'ALL_nonzero_voxel_colors_{idx}.pt')
+    save_path = os.path.join(CHECKPOINT_DIR, f'ALL_nonzero_voxel_colors_{idx}_vox{NUM_VOXELS}.pt')
     torch.save({
         'xyz': torch.from_numpy(world_xyz),
         'avg_color': torch.from_numpy(colors),

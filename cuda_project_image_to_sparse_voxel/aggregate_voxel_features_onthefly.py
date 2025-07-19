@@ -598,7 +598,7 @@ else:
         print(f"  {name}: min={world_xyz[:, axis].min():.3f}, max={world_xyz[:, axis].max():.3f}")
     """
     # Save as .ply for visualization
-    ply_path = os.path.join(CHECKPOINT_DIR, 'nonzero_voxels_with_features.ply')
+    ply_path = os.path.join(CHECKPOINT_DIR, f'ALL_nonzero_voxels_with_features_{idx}_vox{NUM_VOXELS}.ply')
     with open(ply_path, 'w') as f:
         f.write('ply\nformat ascii 1.0\n')
         f.write(f'element vertex {world_xyz.shape[0]}\n')
@@ -616,7 +616,7 @@ else:
     print(f"[PLY] Saved nonzero voxels with features as: {ply_path}")
 
     # Save all consolidated data as a single .pt file
-    save_path = os.path.join(CHECKPOINT_DIR, f'ALL_nonzero_voxel_features_{idx}.pt')
+    save_path = os.path.join(CHECKPOINT_DIR, f'ALL_nonzero_voxel_features_{idx}_vox{NUM_VOXELS}.pt')
     torch.save({
         'xyz': torch.from_numpy(world_xyz),
         'avg_feats': torch.from_numpy(avg_feats),
