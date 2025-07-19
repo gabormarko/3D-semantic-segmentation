@@ -8,6 +8,8 @@ Renamed from render.py to render_semantics.py
 import sys
 sys.path.append('/home/neural_fields/gaussian-splatting')
 sys.path.append('/home/neural_fields/gaussian-splatting/submodules/diff-gaussian-rasterization')
+sys.path.append('/home/neural_fields/gaussian-splatting/utils')
+sys.path.append('/home/neural_fields/gaussian-splatting/gaussian_renderer')
 import torch
 import numpy as np
 from scene import Scene
@@ -27,82 +29,71 @@ except:
     SPARSE_ADAM_AVAILABLE = False
 
 
-def render_set(model_path, name, iteration, views, gaussians, pipeline, background, train_test_exp, separate_sh):
-    render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
-    gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
-
+def render_set(model_path, name, iteration, views, gaussians, pipeline, background, train_test_exp, separate_sh, color_path):
+    # Output folders (match color rendering)
+    render_path = os.path.join('/home/neural_fields/Unified-Lift-Gabor/voxel_to_gaussian/semantics', name, 'renders')
+    gts_path = os.path.join('/home/neural_fields/Unified-Lift-Gabor/voxel_to_gaussian/semantics', name, 'gt')
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
 
+    # --- Assign semantic label colors from npz ---
+    color_data = np.load(color_path)
+    colors = color_data["colors"].astype(np.float32) / 255.0  # shape (N,3)
+    print(f"[DEBUG] Loaded semantic colors: {colors.shape}, dtype={colors.dtype}")
+    sh_dc = torch.from_numpy(colors).unsqueeze(1).cuda()  # shape (N, 1, 3)
+    orig_dc = gaussians._features_dc.data
+    if sh_dc.shape == orig_dc.shape:
+        gaussians._features_dc.data[:] = sh_dc
+        print(f"[DEBUG] Overwrote SH DC coefficients with semantic colors: {sh_dc.shape}")
+    else:
+        print(f"[ERROR] Shape mismatch: semantic colors {sh_dc.shape} vs original SH DC {orig_dc.shape}")
+    # Optionally zero higher-order SH (commented out for lighting)
+    orig_rest = gaussians._features_rest.data
+    gaussians._features_rest.data.zero_()
+    print(f"[DEBUG] Zeroed higher-order SH: {orig_rest.shape}")
+    print(f"[DEBUG] Example assigned colors (first 5): {colors[:5]}")
+    N = gaussians._features_dc.shape[0]
+
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
+        print(f"[DEBUG] Rendering at resolution: view.image_height={getattr(view, 'image_height', None)}, view.image_width={getattr(view, 'image_width', None)}, pipeline.resolution={getattr(pipeline, 'resolution', None)}")
+        print(f"[DEBUG] Number of Gaussians: {N}")
+        try:
+            buffer_size = int(getattr(view, 'image_height', 0)) * int(getattr(view, 'image_width', 0)) * N
+            print(f"[DEBUG] Buffer size (image_height * image_width * N): {buffer_size}")
+        except Exception as e:
+            print(f"[DEBUG] Buffer size calculation error: {e}")
         rendering = render(view, gaussians, pipeline, background, use_trained_exp=train_test_exp, separate_sh=separate_sh)["render"]
         gt = view.original_image[0:3, :, :]
-
-        if args.train_test_exp:
-            rendering = rendering[..., rendering.shape[-1] // 2:]
-            gt = gt[..., gt.shape[-1] // 2:]
-
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
 
-def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool, separate_sh: bool):
+def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool, separate_sh: bool, color_path: str):
     with torch.no_grad():
         gaussians = GaussianModel(dataset.sh_degree)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
-
-        # --- Semantic color assignment ---
-        color_path = "/home/neural_fields/Unified-Lift-Gabor/voxel_to_gaussian/gaussian_labels.npz"
-        color_data = np.load(color_path)
-        colors = color_data["colors"].astype(np.float32) / 255.0  # shape (N,3)
-        print(f"[DEBUG] Loaded semantic colors: {colors.shape}, dtype={colors.dtype}")
-
-        # Check expected color format: renderer expects SH DC coefficients in gaussians._features_dc
-        # Usually, RGB2SH converts (N,3) RGB in [0,1] to (N,3) SH DC
-        # If unsure, check the shape and range of gaussians._features_dc after loading a normal scene
-        try:
-            from gaussian_renderer.utils import RGB2SH  # adjust import if needed
-        except ImportError:
-            def RGB2SH(rgb):
-                # Fallback: identity mapping
-                return rgb
-
-        sh_dc = RGB2SH(torch.from_numpy(colors).cuda())  # shape (N,3)
-        sh_dc = sh_dc.unsqueeze(-1)  # shape (N,3,1)
-        gaussians._features_dc = torch.nn.Parameter(sh_dc.transpose(1,2).contiguous())
-        print(f"[DEBUG] Assigned SH DC coefficients: {gaussians._features_dc.shape}, min={gaussians._features_dc.min().item()}, max={gaussians._features_dc.max().item()}")
-
-        # Zero out higher-order SH coefficients
-        N = gaussians._features_dc.shape[0]
-        C = gaussians._features_dc.shape[1]
-        H = (dataset.sh_degree + 1) ** 2 - 1
-        gaussians._features_rest = torch.nn.Parameter(torch.zeros((N, C, H), device='cuda'))
-        print(f"[DEBUG] Zeroed higher-order SH: {gaussians._features_rest.shape}")
-
-        # Optional: print a few example colors
-        print(f"[DEBUG] Example assigned colors (first 5): {colors[:5]}")
 
         bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
         if not skip_train:
-             render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, dataset.train_test_exp, separate_sh)
+             render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, dataset.train_test_exp, separate_sh, color_path)
 
         if not skip_test:
-             render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, dataset.train_test_exp, separate_sh)
+             render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, dataset.train_test_exp, separate_sh, color_path)
 
 if __name__ == "__main__":
-    # Set up command line argument parser
-    parser = ArgumentParser(description="Testing script parameters")
+    parser = ArgumentParser(description="Semantic Gaussian Rendering script parameters")
     model = ModelParams(parser, sentinel=True)
     pipeline = PipelineParams(parser)
     parser.add_argument("--iteration", default=-1, type=int)
     parser.add_argument("--skip_train", action="store_true")
     parser.add_argument("--skip_test", action="store_true")
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--color_path", type=str, required=False, default="/home/neural_fields/Unified-Lift-Gabor/voxel_to_gaussian/gaussian_labels.npz")
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)
 
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
-    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, SPARSE_ADAM_AVAILABLE)
+    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, SPARSE_ADAM_AVAILABLE, args.color_path)

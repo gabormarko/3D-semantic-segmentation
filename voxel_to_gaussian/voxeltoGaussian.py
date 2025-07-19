@@ -250,10 +250,10 @@ def _cli_query(args: argparse.Namespace) -> None:
     labels, colors = prompts_to_gaussian_onehot(
         args.prompt, voxel_feat, g2v_idx, device=args.device
     )
-    # Save both label indices and colors in output
-    np.savez(args.out, labels=labels, colors=colors)
+    # Save both label indices, colors, and prompt list in output
+    np.savez(args.out, labels=labels, colors=colors, prompts=np.array(args.prompt))
     print(
-        f"[✓] Labels and colors saved: {args.out}  positives={np.sum(labels)}/{labels.size}"
+        f"[✓] Labels, colors, and prompts saved: {args.out}  positives={np.sum(labels)}/{labels.size}"
     )
     # Free VRAM if we were on GPU
     if args.device == "cuda":
