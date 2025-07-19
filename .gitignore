@@ -24,6 +24,9 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+*.npy
+*.pth
+*.ply
 
 # Virtual Environment
 venv/
