@@ -28,6 +28,7 @@ def main():
     print(f"Loaded {pts.shape[0]} points from PLY")
 
     origin = np.array(args.grid_origin, dtype=np.float32)
+    print(f"[DEBUG] Using grid_origin for occupancy: {origin}")
     coords = np.round((pts - origin) / args.voxel_size).astype(np.int64)
     print(f"Computed integer voxel coords, sample: {coords[:5]}")
 

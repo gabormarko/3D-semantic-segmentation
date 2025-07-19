@@ -203,7 +203,31 @@ def prompts_to_gaussian_onehot(
     # Propagate to Gaussians
     gauss_cls = voxel_cls[g2v_idx.to(device)]
     print(f"[DEBUG] Propagated labels to {gauss_cls.shape[0]} Gaussians. Example: {gauss_cls[:10].tolist()}")
-    return gauss_cls.cpu().numpy()  # (M,)
+
+    # --- Assign colors to each label index (palette logic from 2D) ---
+    def get_palette(num_cls):
+        n = num_cls
+        palette = [0]*(n*3)
+        for j in range(n):
+            lab = j
+            palette[j*3+0] = 0
+            palette[j*3+1] = 0
+            palette[j*3+2] = 0
+            i = 0
+            while lab > 0:
+                palette[j*3+0] |= (((lab >> 0) & 1) << (7-i))
+                palette[j*3+1] |= (((lab >> 1) & 1) << (7-i))
+                palette[j*3+2] |= (((lab >> 2) & 1) << (7-i))
+                i += 1
+                lab >>= 3
+        return palette
+
+    palette = get_palette(num_labels)
+    # Assign color to each Gaussian based on its label index
+    gauss_colors = np.zeros((gauss_cls.shape[0], 3), dtype=np.uint8)
+    for i, idx in enumerate(gauss_cls.cpu().numpy()):
+        gauss_colors[i] = palette[3*idx:3*idx+3]
+    return gauss_cls.cpu().numpy(), gauss_colors  # (M,), (M,3)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CLI wrappers
@@ -223,12 +247,13 @@ def _cli_build_map(args: argparse.Namespace) -> None:
 def _cli_query(args: argparse.Namespace) -> None:
     _, voxel_feat = load_voxels(args.vox)
     g2v_idx = torch.from_numpy(np.load(args.map))
-    labels = prompts_to_gaussian_onehot(
+    labels, colors = prompts_to_gaussian_onehot(
         args.prompt, voxel_feat, g2v_idx, device=args.device
     )
-    np.save(args.out, labels)
+    # Save both label indices and colors in output
+    np.savez(args.out, labels=labels, colors=colors)
     print(
-        f"[✓] Labels saved: {args.out}  positives={labels.sum()}/{labels.size}"
+        f"[✓] Labels and colors saved: {args.out}  positives={np.sum(labels)}/{labels.size}"
     )
     # Free VRAM if we were on GPU
     if args.device == "cuda":

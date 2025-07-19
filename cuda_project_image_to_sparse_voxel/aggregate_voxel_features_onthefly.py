@@ -14,14 +14,14 @@ parser.add_argument('--first_only', action='store_true', help='Only process the 
 args = parser.parse_args()
 
 # Create output directory for checkpoints and final outputs
-CHECKPOINT_DIR = "voxel_feature_checkpoints_vox41759"
+CHECKPOINT_DIR = "voxel_feature_checkpoints_vox59293"
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
 # Paths and config
 LSEG_DIR = "/home/neural_fields/Unified-Lift-Gabor/data/scannetpp/officescene/lseg_embed_features/features"
 CAM_PARAMS = "camera_params/camera_params.json"
 OCCUPANCY = "ALL_occupancy.pt"
-VOXEL_PLY = "/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/officescene_filtered/officescene_minkowski_41759vox_iter50000_cell0.05_eps0.05_neig12_grid.ply"
+VOXEL_PLY = "/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/officescene_filtered_ply_adv/cc946f8b-f_minkowski_59293vox_iter_opac0.85_cell0.05_eps0.06_neig8_grid.ply"
 TENSOR_DATA_TMP = "tensor_data/tmp_tensor_data.pt"
 
 # Extract voxel size and grid origin from the PLY file (as in bash script)

@@ -121,7 +121,7 @@ def main():
     print(f"Using specified voxel size: {voxel_size:.6f}")
     voxel_indices = np.floor((filtered_points - min_corner) / voxel_size).astype(int)
     unique_indices, inverse = np.unique(voxel_indices, axis=0, return_inverse=True)
-    voxel_centers = unique_indices * voxel_size + min_corner + voxel_size / 2.0
+    voxel_centers = unique_indices * voxel_size + min_corner
     print(f"[INFO] Sparse voxel grid: {voxel_centers.shape[0]} voxels")
     voxel_colors = np.zeros((voxel_centers.shape[0], 3), dtype=np.float32)
     for i in range(voxel_centers.shape[0]):
@@ -151,8 +151,40 @@ def main():
     params_str = f"_minkowski_{voxel_centers.shape[0]}vox_iter{iter_str}_opac{args.opacity_threshold}_cell{args.cell_size}_eps{args.density_eps}_neig{args.density_min_neighbors}_grid"
     voxel_grid_name = f"{scene_name}{params_str}.ply"
     voxel_grid_path = os.path.join(args.output_dir, voxel_grid_name)
-    from plyfile import PlyElement
-    PlyData([PlyElement.describe(voxel_grid_data, 'vertex')]).write(voxel_grid_path)
+    # Manual PLY header writing for robust comments
+    def write_ply_with_comments(filename, points, colors, voxel_size, grid_origin, grid_shape=None):
+        with open(filename, 'w') as f:
+            header = (
+                f"ply\n"
+                f"format ascii 1.0\n"
+                f"comment voxel_size {voxel_size}\n"
+                f"comment grid_origin {grid_origin[0]} {grid_origin[1]} {grid_origin[2]}\n"
+                + (f"comment grid_shape {grid_shape[0]} {grid_shape[1]} {grid_shape[2]}\n" if grid_shape is not None else "")
+                + f"element vertex {points.shape[0]}\n"
+                f"property float x\n"
+                f"property float y\n"
+                f"property float z\n"
+                f"property uchar red\n"
+                f"property uchar green\n"
+                f"property uchar blue\n"
+                f"end_header\n"
+            )
+            f.write(header)
+            xyz = points.astype(np.float32)
+            rgb = colors.astype(np.uint8)
+            for i in range(xyz.shape[0]):
+                line = f"{xyz[i,0]} {xyz[i,1]} {xyz[i,2]} {rgb[i,0]} {rgb[i,1]} {rgb[i,2]}\n"
+                f.write(line)
+    grid_shape = None
+    # Optionally set grid_shape if you compute it elsewhere
+    write_ply_with_comments(
+        voxel_grid_path,
+        voxel_centers,
+        voxel_colors,
+        voxel_size,
+        min_corner,
+        grid_shape=grid_shape
+    )
     print(f"[INFO] Saved sparse voxel grid to {voxel_grid_path}")
 
 if __name__ == "__main__":
