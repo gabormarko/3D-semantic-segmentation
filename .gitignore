@@ -27,6 +27,9 @@ var/
 *.npy
 *.pth
 *.ply
+*.png
+*.jpg
+*.npz
 
 # Virtual Environment
 venv/
