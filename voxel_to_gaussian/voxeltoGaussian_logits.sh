@@ -31,6 +31,7 @@ python3 /home/neural_fields/Unified-Lift-Gabor/voxel_to_gaussian/voxeltoGaussian
     --map "$MAP_FILE" \
     --prompt "${PROMPTS[@]}" \
     --out "$LABELS_OUT" \
-    --device "$DEVICE"
+    --device "$DEVICE" \
+    --gauss "$GAUSSIAN_FILE"
 
 echo "Pipeline complete. Output: $LABELS_OUT (contains per-Gaussian semantic labels and logits)"

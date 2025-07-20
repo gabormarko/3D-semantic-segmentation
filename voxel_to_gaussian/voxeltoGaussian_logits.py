@@ -236,16 +236,106 @@ def _cli_query(args: argparse.Namespace) -> None:
     print(f"[✓] Labels, logits, and prompts saved: {args.out}  positives={np.sum(labels)}/{labels.size}")
 
     # --- Summary statistics ---
+
     print("\n[SUMMARY] Label distribution:")
     unique, counts = np.unique(labels, return_counts=True)
     for i, c in zip(unique, counts):
         label_name = args.prompt[i] if i < len(args.prompt) else f"Label {i}"
         print(f"  {label_name:20s} (idx={i}): count={c}")
 
+    # Save histogram PNG for assigned labels
+    try:
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(8,4))
+        plt.bar([args.prompt[i] if i < len(args.prompt) else f"Label {i}" for i in unique], counts, color='skyblue')
+        plt.xlabel('Label')
+        plt.ylabel('Count')
+        plt.title('Gaussian Assigned Label Distribution')
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        hist_path = str(args.out).replace('.npz', '_label_hist.png')
+        plt.savefig(hist_path)
+        plt.close()
+        print(f"[✓] Saved label histogram PNG: {hist_path}")
+    except Exception as e:
+        print(f"[WARN] Could not save label histogram PNG: {e}")
+
+    print("\n[DEBUG] Argmax label histogram for Gaussians:")
+    argmax_labels = np.argmax(logits, axis=1)
+    uniq, cnts = np.unique(argmax_labels, return_counts=True)
+    for i, c in zip(uniq, cnts):
+        label_name = args.prompt[i] if i < len(args.prompt) else f"Label {i}"
+        print(f"  {label_name:20s} (idx={i}): count={c}")
+
+    # Save histogram PNG for argmax labels
+    try:
+        plt.figure(figsize=(8,4))
+        plt.bar([args.prompt[i] if i < len(args.prompt) else f"Label {i}" for i in uniq], cnts, color='salmon')
+        plt.xlabel('Label')
+        plt.ylabel('Count')
+        plt.title('Gaussian Argmax Label Distribution')
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        hist_path2 = str(args.out).replace('.npz', '_argmax_hist.png')
+        plt.savefig(hist_path2)
+        plt.close()
+        print(f"[✓] Saved argmax label histogram PNG: {hist_path2}")
+    except Exception as e:
+        print(f"[WARN] Could not save argmax label histogram PNG: {e}")
+
+    print("\n[DEBUG] Example Gaussian logits (first 5):")
+    for i in range(min(5, logits.shape[0])):
+        print(f"  Gaussian {i}: logits={logits[i]}, argmax={np.argmax(logits[i])}")
+
     print("\n[SUMMARY] Logit statistics per class:")
     for i, label_name in enumerate(args.prompt):
         vals = logits[:, i]
         print(f"  {label_name:20s} (idx={i}): min={vals.min():.4f} max={vals.max():.4f} mean={vals.mean():.4f} std={vals.std():.4f} count={vals.size}")
+
+    # --- Save colored .ply for Gaussians ---
+    # Load Gaussian centers
+    if not hasattr(args, 'gauss'):
+        raise ValueError("Missing required argument --gauss for Gaussian centers. Please add --gauss <path> to your query command.")
+    gaussian_mu = load_gaussians_mu(args.gauss)
+    num_labels = len(args.prompt)
+    def get_palette(num_cls):
+        n = num_cls
+        palette = [0]*(n*3)
+        for j in range(n):
+            lab = j
+            palette[j*3+0] = 0
+            palette[j*3+1] = 0
+            palette[j*3+2] = 0
+            i = 0
+            while lab > 0:
+                palette[j*3+0] |= (((lab >> 0) & 1) << (7-i))
+                palette[j*3+1] |= (((lab >> 1) & 1) << (7-i))
+                palette[j*3+2] |= (((lab >> 2) & 1) << (7-i))
+                i += 1
+                lab >>= 3
+        return palette
+
+    palette = get_palette(num_labels)
+    # Assign color to each Gaussian
+    gaussian_colors = np.zeros((gaussian_mu.shape[0], 3), dtype=np.uint8)
+    for i in range(gaussian_mu.shape[0]):
+        idx = int(argmax_labels[i])
+        gaussian_colors[i, 0] = palette[3*idx+0]
+        gaussian_colors[i, 1] = palette[3*idx+1]
+        gaussian_colors[i, 2] = palette[3*idx+2]
+
+    ply_path = str(args.out).replace('.npz', '_colored_gaussians.ply')
+    with open(ply_path, 'w') as f:
+        f.write('ply\nformat ascii 1.0\n')
+        f.write(f'element vertex {gaussian_mu.shape[0]}\n')
+        f.write('property float x\nproperty float y\nproperty float z\n')
+        f.write('property uchar red\nproperty uchar green\nproperty uchar blue\n')
+        f.write('end_header\n')
+        for i in range(gaussian_mu.shape[0]):
+            x, y, z = gaussian_mu[i].tolist()
+            r, g, b = gaussian_colors[i].tolist()
+            f.write(f'{x} {y} {z} {r} {g} {b}\n')
+    print(f"[✓] Colored Gaussian .ply saved: {ply_path}")
 
     # Free VRAM if we were on GPU
     if args.device == "cuda":
@@ -280,6 +370,8 @@ if __name__ == "__main__":
     qry.add_argument("--vox", type=pathlib.Path, required=True)
     qry.add_argument("--map", type=pathlib.Path, required=True,
                      help=".npy produced by build_map")
+    qry.add_argument("--gauss", type=pathlib.Path, required=True,
+                     help=".pt/.pth/.npz/.npy file with Gaussian centers (mu)")
     qry.add_argument("--prompt", type=str, nargs="+", required=True,
                  help="List of prompt categories, e.g. --prompt 'chair' 'table' 'lamp'")
     qry.add_argument("--out", type=pathlib.Path, required=True,

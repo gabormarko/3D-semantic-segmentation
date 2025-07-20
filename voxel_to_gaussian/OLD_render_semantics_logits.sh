@@ -9,10 +9,9 @@ GAUSSIAN_LABELS="/home/neural_fields/Unified-Lift-Gabor/voxel_to_gaussian/gaussi
 SKIP_TRAIN=false                       # Set to true to skip train rendering
 SKIP_TEST=false                        # Set to true to skip test rendering
 QUIET=false                            # Set to true for quiet mode
-FIRST_ONLY=false                        # Set to true to render only the first image
 
 # --------- Command Construction ---------
-CMD="python /home/neural_fields/Unified-Lift-Gabor/voxel_to_gaussian/render_semantics_logits.py \
+CMD="python /home/neural_fields/Unified-Lift-Gabor/voxel_to_gaussian/OLD_render_semantics_logits.py \
   --model_path $MODEL_PATH \
   --iteration $ITERATION \
   --logit_path $GAUSSIAN_LABELS"
@@ -25,9 +24,6 @@ if [ "$SKIP_TRAIN" = true ]; then
 fi
 if [ "$SKIP_TEST" = true ]; then
   CMD+=" --skip_test"
-fi
-if [ "$FIRST_ONLY" = true ]; then
-  CMD+=" --first_only"
 fi
 
 # --------- Run ---------
