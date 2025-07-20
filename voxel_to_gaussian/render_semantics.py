@@ -38,7 +38,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 
     # --- Assign semantic label colors from npz ---
     color_data = np.load(color_path)
-    colors = color_data["colors"].astype(np.float32) / 255.0  # shape (N,3)
+    colors = color_data["colors"].astype(np.float32) / 255.0 * 2  # shape (N,3)
     print(f"[DEBUG] Loaded semantic colors: {colors.shape}, dtype={colors.dtype}")
     sh_dc = torch.from_numpy(colors).unsqueeze(1).cuda()  # shape (N, 1, 3)
     orig_dc = gaussians._features_dc.data
