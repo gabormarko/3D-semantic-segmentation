@@ -44,6 +44,8 @@ if __name__ == '__main__':
     parser.add_argument('--grid_origin', nargs=3, type=float, required=True, help='Grid origin (x y z)')
     parser.add_argument('--max_images', type=int, default=10, help='Max images to use')
     parser.add_argument('--output', required=True, help='Output tensor_data.pt')
+    parser.add_argument('--image_size', nargs=2, type=int, help='Target image size (H W) for upsampling feature maps')
+    parser.add_argument('--downsample_factor', type=float, default=None, help='Downsampling factor used for image and camera params')
     args = parser.parse_args()
 
     print(f"Loading occupancy from: {args.occupancy}")
@@ -88,10 +90,19 @@ if __name__ == '__main__':
     if unmatched_imgs:
         print(f"[DEBUG] Image entries with no matching feature file: {len(unmatched_imgs)}")
 
+    import cv2
     feats_list, intr_list, ext_list = [], [], []
     H = W = C = None
     used = 0
     images_dir = '/home/neural_fields/Unified-Lift-Gabor/data/scannetpp/officescene/images'
+    # Parse image size from args if provided
+    H_new = W_new = None
+    if args.image_size is not None:
+        H_new = int(args.image_size[0])
+        W_new = int(args.image_size[1])
+    # Use downsample_factor for any scaling logic if provided
+    downsample_factor = args.downsample_factor if args.downsample_factor is not None else None
+
     for fname in files:
         base = fname[:-4]  # strip '.npy'
         entry = filename_to_entry.get(base, None)
@@ -103,64 +114,42 @@ if __name__ == '__main__':
             print(f"[ALIGNMENT DEBUG] Feature file: {fname} <-> Camera entry: {entry['name']}")
         arr = np.load(os.path.join(args.lseg_dir, fname))
 
-        # Robustly find the original image file
-        orig_img_path = None
-        checked_candidates = []
-        if isinstance(entry, dict) and 'name' in entry:
-            # First, check for the file with the base name and no extra extension
-            candidate = os.path.join(images_dir, base)
-            checked_candidates.append(candidate)
-            if os.path.exists(candidate):
-                orig_img_path = candidate
-                print(f"[find_original_image] Found exact match (no extension added): {candidate}")
-            # Then try with common extensions if not found
-            if orig_img_path is None:
-                for ext in ['.jpg', '.jpeg', '.png', '.JPG', '.JPEG', '.PNG']:
-                    candidate = os.path.join(images_dir, base + ext)
-                    checked_candidates.append(candidate)
-                    if os.path.exists(candidate):
-                        orig_img_path = candidate
-                        print(f"[find_original_image] Found exact match: {candidate}")
-                        break
-            # Fallback: case-insensitive and extension-insensitive search
-            if orig_img_path is None:
-                try:
-                    for fname_img in os.listdir(images_dir):
-                        fbase, fext = os.path.splitext(fname_img)
-                        if fbase.lower() == base.lower():
-                            candidate = os.path.join(images_dir, fname_img)
-                            checked_candidates.append(candidate)
-                            print(f"[find_original_image] Fallback match: {fname_img} in {images_dir}")
-                            orig_img_path = candidate
-                            break
-                except Exception as e:
-                    print(f"[find_original_image] Error listing directory {images_dir}: {e}")
-            if orig_img_path is None:
-                print(f"[find_original_image] Checked candidates:")
-                for c in checked_candidates:
-                    print(f"  {c}")
-
-        if orig_img_path is not None:
-            from PIL import Image
-            orig_img = Image.open(orig_img_path)
-            orig_w, orig_h = orig_img.size  # PIL: (width, height)
-            print(f"[DEBUG] Original image size for {base}: {orig_h}x{orig_w} (height x width)")
-            # Always treat arr as [C, H, W] (512, 192, 272)
-            arr_torch = torch.from_numpy(arr).unsqueeze(0).float()  # [1, C, H, W]
-            upsampled = torch.nn.functional.interpolate(
-                arr_torch, size=(orig_h, orig_w), mode='bilinear', align_corners=False
-            )  # [1, C, H, W]
-            arr = upsampled.squeeze(0).cpu().numpy()  # [C, H, W]
-            C, H_, W_ = arr.shape
-            print(f"[DEBUG] Upsampled feature map shape for {base}: {arr.shape} (C,H,W)")
-            print(f"[DEBUG] Image size for frustum/kernel: {H_}x{W_} (height x width)")
-            feats_list.append(torch.from_numpy(arr).float())
+        # Upsample feature map to match new image size if needed
+        C, H_, W_ = arr.shape
+        if H_new is not None and W_new is not None and (H_ != H_new or W_ != W_new):
+            print(f"[UPSAMPLE] Feature map shape before: {arr.shape}, target: (C={C}, H={H_new}, W={W_new})")
+            arr_upsampled = np.zeros((C, H_new, W_new), dtype=np.float32)
+            for c in range(C):
+                # Convert to float32 and ensure contiguous for OpenCV
+                channel = np.ascontiguousarray(arr[c].astype(np.float32))
+                arr_upsampled[c] = cv2.resize(channel, (W_new, H_new), interpolation=cv2.INTER_LINEAR)
+            arr = arr_upsampled.astype(arr.dtype)
+            print(f"[UPSAMPLE] Feature map shape after: {arr.shape}")
         else:
-            print(f"[DEBUG] No original image found for {base}, using feature shape as is: {arr.shape}")
-            # Always treat arr as [C, H, W] (512, 192, 272)
-            C, H_, W_ = arr.shape
-            print(f"[DEBUG] Feature map shape used: {arr.shape} (C,H,W)")
-            feats_list.append(torch.from_numpy(arr).float())
+            print(f"[UPSAMPLE] No upsampling needed for feature map: {arr.shape}")
+
+        # If downsample_factor is provided, scale camera intrinsics accordingly
+        if downsample_factor is not None and isinstance(entry, dict):
+            cam_id = str(entry['camera_id'])
+            params = cams[cam_id]['params']
+            if len(params) == 4:
+                fx, fy, cx, cy = params
+            else:
+                fx, cx, cy = params; fy = fx
+            fx *= downsample_factor
+            fy *= downsample_factor
+            cx *= downsample_factor
+            cy *= downsample_factor
+            intr_list.append(torch.tensor([fx, fy, cx, cy], dtype=torch.float32))
+        elif isinstance(entry, dict):
+            cam_id = str(entry['camera_id'])
+            params = cams[cam_id]['params']
+            if len(params) == 4:
+                fx, fy, cx, cy = params
+            else:
+                fx, cx, cy = params; fy = fx
+            intr_list.append(torch.tensor([fx, fy, cx, cy], dtype=torch.float32))
+        feats_list.append(torch.from_numpy(arr).float())
         # entry may be dict or str
         if isinstance(entry, dict):
             # Use string key for camera_id to avoid KeyError

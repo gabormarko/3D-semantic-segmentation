@@ -248,13 +248,14 @@ def main():
     projected_feats = projected_feats[valid_coord_mask]
 
 
+    # Compress features to float16 before saving
+    projected_feats_compressed = projected_feats.to(torch.float16)
     out = {
-        'mapping2dto3d_num': mapping2dto3d.cpu(),
-        'projected_feats': projected_feats,
+        'projected_feats': projected_feats_compressed,
         'projected_indices': projected_indices,
     }
     torch.save(out, args.output)
-    print(f"Saved projection output to {args.output}")
+    print(f"Saved filtered and compressed projection output to {args.output}")
 
 if __name__ == '__main__':
     main()
