@@ -61,3 +61,7 @@ cuda_project_image_to_sparse_voxel/vis_open_voc/
 cuda_project_image_to_sparse_voxel/voxel_feature_checkpoints_vox41759/
 
 lang-seg/PyTorch-Encoding/
+
+submodules/diff-gaussian-rasterization/
+gaussian-splatting/
+MinkowskiEngine_old/
