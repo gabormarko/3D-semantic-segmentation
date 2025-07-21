@@ -13,7 +13,8 @@ def parse_args():
     parser.add_argument("--density_eps", type=float, default=0.05, help="Epsilon radius for density filtering")
     parser.add_argument("--density_min_neighbors", type=int, default=10, help="Minimum neighbors for density filtering")
     parser.add_argument("--opacity_threshold", type=float, default=0.9, help="Minimum opacity for a gaussian to be considered part of the surface.")
-    parser.add_argument("--scale_threshold", type=float, default=0.0, help="Minimum scale for a gaussian to be considered (optional)")
+    parser.add_argument("--scale_threshold", type=float, default=0.0, help="Maximum allowed scale for a gaussian to be considered (optional)")
+    parser.add_argument("--spikiness_threshold", type=float, default=10.0, help="Maximum allowed ratio of largest to smallest scale (spikiness filter)")
     parser.add_argument("--adaptive_density", action="store_true", help="Enable adaptive density filtering based on local scale")
     parser.add_argument("--normal_consistency", type=float, default=0.9, help="Minimum dot product for normal consistency filtering (0-1)")
     parser.add_argument("--normal_consistency_eps", type=float, default=0.05, help="Neighborhood radius for normal consistency filtering")
@@ -32,6 +33,7 @@ def main():
     ply = PlyData.read(args.ply)
     vertex = ply['vertex']
     xyz = np.stack([vertex['x'], vertex['y'], vertex['z']], axis=1)
+    print(f"[INFO] Loaded input PLY with {xyz.shape[0]} points.")
     # Extract RGB from f_dc_0, f_dc_1, f_dc_2
     r = np.clip(vertex['f_dc_0'], 0, 1) * 255
     g = np.clip(vertex['f_dc_1'], 0, 1) * 255
@@ -39,11 +41,14 @@ def main():
     colors = np.stack([r, g, b], axis=1).astype(np.uint8)
     # Extract opacity
     opacity = vertex['opacity']
-    # Optionally extract scale
+    # Optionally extract scale (vector per Gaussian)
     scale_fields = [f'scale_{i}' for i in range(3) if f'scale_{i}' in vertex.data.dtype.names]
     if scale_fields:
-        scales = np.mean(np.stack([vertex[f] for f in scale_fields], axis=1), axis=1)
+        scales_vec = np.stack([vertex[f] for f in scale_fields], axis=1)
+        # For legacy code, also keep mean scale
+        scales = np.mean(scales_vec, axis=1)
     else:
+        scales_vec = None
         scales = np.ones_like(opacity)
     # Optionally extract normals
     normal_fields = [f'nx', 'ny', 'nz']
@@ -52,15 +57,26 @@ def main():
         normals = normals / (np.linalg.norm(normals, axis=1, keepdims=True) + 1e-8)
     else:
         normals = None
-    # Filter by scale if requested
-    if args.scale_threshold > 0.0:
-        scale_mask = scales > args.scale_threshold
-        xyz = xyz[scale_mask]
-        colors = colors[scale_mask]
-        opacity = opacity[scale_mask]
-        scales = scales[scale_mask]
+    # --- SCALE AND SPIKINESS FILTERING ---
+    # Only apply if scale fields are present
+    if scales_vec is not None:
+        # Clamp very small scale values to avoid division by zero
+        scales_clamped = np.copy(scales_vec)
+        scales_clamped[scales_clamped < 1e-6] = 1e-6
+        max_scale = np.max(scales_clamped, axis=1)
+        min_scale = np.min(scales_clamped, axis=1)
+        spikiness_ratios = max_scale / min_scale
+        mask = spikiness_ratios < args.spikiness_threshold
+        num_spiky = (~mask).sum()
+        if num_spiky > 0:
+            print(f"Filtered out {num_spiky} spiky Gaussians (ratio > {args.spikiness_threshold})")
+        xyz = xyz[mask]
+        colors = colors[mask]
+        opacity = opacity[mask]
+        scales = scales[mask]
+        scales_vec = scales_vec[mask]
         if normals is not None:
-            normals = normals[scale_mask]
+            normals = normals[mask]
     # Rank-based opacity filtering: keep top (1-opacity_threshold) fraction by opacity
     keep_fraction = 1.0 - args.opacity_threshold
     N_total = opacity.shape[0]
@@ -73,6 +89,8 @@ def main():
     colors = colors[top_indices]
     opacity = opacity[top_indices]
     scales = scales[top_indices]
+    if scales_vec is not None:
+        scales_vec = scales_vec[top_indices]
     if normals is not None:
         normals = normals[top_indices]
     print(f"[INFO] Filtered to {xyz.shape[0]} points with top {int(100*keep_fraction)}% opacity (N={N_keep} of {N_total})")

@@ -2,9 +2,9 @@
 # Usage: bash minkowski_mesh_voxel_grid.sh
 # Creates a sparse voxel grid near the surface of a mesh geometry (PLY file)
 
-MESH_FILE="/home/neural_fields/Unified-Lift-Gabor/data/scannetpp/officescene/scans/mesh_aligned_0.05_semantic.ply"
+MESH_FILE="/home/neural_fields/Unified-Lift-Gabor/data/scannetpp/officescene/scans/mesh_aligned_0.05.ply"
 OUTPUT_DIR="output/minkowski_mesh_grid"
-CELL_SIZE=0.06
+CELL_SIZE=0.05
 DENSITY_EPS=0.05
 DENSITY_MIN_NEIGHBORS=10
 

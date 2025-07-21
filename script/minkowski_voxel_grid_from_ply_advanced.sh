@@ -6,11 +6,12 @@ INPUT_PLY="/home/neural_fields/gaussian-splatting/output/cc946f8b-f/point_cloud/
 OUTPUT_DIR="/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/officescene_filtered_ply_adv"
 
 # Set parameters here
-CELL_SIZE=0.05  # Size of voxel grid cells
+CELL_SIZE=0.04  # Size of voxel grid cells
 DENSITY_EPS=0.06    # Epsilon radius for density filtering
 DENSITY_MIN_NEIGHBORS=8   # Minimum neighbors for density filtering
-OPACITY_THRESHOLD=0.85 # Fraction of points to leave out (e.g. 0.8 keeps top 20% by opacity)
-SCALE_THRESHOLD=0.0     # Minimum scale for a Gaussian to be considered part of the surface
+OPACITY_THRESHOLD=0.8 # Fraction of points to leave out (e.g. 0.8 keeps top 20% by opacity)
+SCALE_THRESHOLD=0.2     # Maximum allowed scale for a Gaussian to be considered part of the surface
+SPIKINESS_THRESHOLD=5.0 # Maximum allowed ratio of largest to smallest scale (spikiness filter)
 ADAPTIVE_DENSITY="--adaptive_density"  # set to "" to disable
 NORMAL_CONSISTENCY=1.0  # 1.0: DISABLED, Normal consistency threshold (0.0 to 1.0)
 NORMAL_CONSISTENCY_EPS=0.05 # Epsilon radius for normal consistency
@@ -24,6 +25,7 @@ python3 script/minkowski_voxel_grid_from_ply_advanced.py \
     --density_min_neighbors "$DENSITY_MIN_NEIGHBORS" \
     --opacity_threshold "$OPACITY_THRESHOLD" \
     --scale_threshold "$SCALE_THRESHOLD" \
+    --spikiness_threshold "$SPIKINESS_THRESHOLD" \
     $ADAPTIVE_DENSITY \
     --normal_consistency "$NORMAL_CONSISTENCY" \
     --normal_consistency_eps "$NORMAL_CONSISTENCY_EPS" \
