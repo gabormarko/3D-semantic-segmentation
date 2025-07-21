@@ -20,6 +20,12 @@ from utils.general_utils import strip_symmetric, build_scaling_rotation
 from scipy.spatial import KDTree
 
 class GaussianModel:
+    @property
+    def get_dc(self):
+        """Return the base DC color features for each Gaussian."""
+        # _features_dc shape: (N, 3, 1) or (N, 3, K) with K=1 for DC
+        # Return as (N, 3)
+        return self._features_dc.squeeze(-1)
 
     def setup_functions(self):
         def build_covariance_from_scaling_rotation(scaling, scaling_modifier, rotation):
