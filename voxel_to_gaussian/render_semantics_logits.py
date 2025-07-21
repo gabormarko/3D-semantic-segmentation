@@ -35,14 +35,17 @@ except:
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background, train_test_exp, separate_sh, logit_path, first_only=False):
     # Output folders (match color rendering)
-    render_path = os.path.join('/home/neural_fields/Unified-Lift-Gabor/voxel_to_gaussian/semantics', name, 'renders')
-    gts_path = os.path.join('/home/neural_fields/Unified-Lift-Gabor/voxel_to_gaussian/semantics', name, 'gt')
+    base_path = '/home/neural_fields/Unified-Lift-Gabor/voxel_to_gaussian/semantics_96741'
+    render_path = os.path.join(base_path, name, 'renders')
+    gts_path = os.path.join(base_path, name, 'gt')
+    labels_path = os.path.join(base_path, name, 'labels')
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
+    makedirs(labels_path, exist_ok=True)
 
     # --- Load per-Gaussian logits from npz and attach ---
     logit_data = np.load(logit_path)
-    NUM_CHANNELS = 16  # Keep this in sync with config.h
+    NUM_CHANNELS = 32  # Keep this in sync with config.h
     if "logits" in logit_data:
         logits = logit_data["logits"]  # shape (N, num_classes)
         # Pad or slice logits to NUM_CHANNELS
@@ -114,12 +117,31 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
                     logit_vec = rendering[:, px, py].detach().cpu().numpy()
                     print(f"[DEBUG] Logit vector at pixel ({px},{py}): {logit_vec}")
             # Take argmax over classes for semantic mask
-            semantic_mask = torch.argmax(rendering, dim=0).cpu().numpy().astype(np.uint8)  # shape [H, W]
-            # Save semantic mask as PNG (raw indices)
+            semantic_mask = torch.argmax(rendering, dim=0)  # shape [H, W], torch tensor
+            semantic_mask_np = semantic_mask.cpu().numpy().astype(np.uint8)
             from PIL import Image
-            #mask_img = Image.fromarray(semantic_mask)
+            #mask_img = Image.fromarray(semantic_mask_np)
             #mask_img.save(os.path.join(render_path, '{0:05d}_mask.png'.format(idx)))
             #print(f"[DEBUG] Saved semantic mask: {os.path.join(render_path, '{0:05d}_mask.png'.format(idx))}")
+
+            # --- Save per-pixel label index, name, and value ---
+            H, W = semantic_mask.shape
+            # label_indices: [H, W] (torch tensor)
+            label_indices = semantic_mask.cpu()
+            # label_values: [H, W] (torch tensor)
+            label_values = rendering.detach().cpu()[label_indices, torch.arange(H)[:,None], torch.arange(W)]
+            # label_names: [H, W] (numpy array of strings)
+            if 'prompts' in logit_data:
+                label_names_list = [str(x) for x in logit_data['prompts']]
+            else:
+                label_names_list = [f"Label {i}" for i in range(rendering.shape[0])]
+            label_names = np.array([label_names_list[idx] for idx in label_indices.numpy().flatten()]).reshape(H, W)
+            # Save all as a dict in a .pt file
+            # Only save per-pixel label index
+            torch.save({
+                'label_indices': label_indices  # [H, W] torch.uint8
+            }, os.path.join(labels_path, '{0:05d}_labels.pt'.format(idx)))
+            print(f"[DEBUG] Saved per-pixel label indices: {os.path.join(labels_path, '{0:05d}_labels.pt'.format(idx))}")
 
             # --- Palette-based color mapping ---
             def get_palette(num_cls):
@@ -145,7 +167,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
             else:
                 num_classes = 1
             palette = get_palette(num_classes)
-            mask_img_color = Image.fromarray(semantic_mask)
+            mask_img_color = Image.fromarray(semantic_mask.cpu().numpy().astype(np.uint8))
             mask_img_color.putpalette(palette)
             mask_img_color.save(os.path.join(render_path, '{0:05d}_mask_color.png'.format(idx)))
             print(f"[DEBUG] Saved colored semantic mask: {os.path.join(render_path, '{0:05d}_mask_color.png'.format(idx))}")
@@ -163,17 +185,21 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
             if label_names is None or len(label_names) != num_classes:
                 label_names = [f"Label {i}" for i in range(num_classes)]
             # Count pixels for all classes (even if zero)
-            counts = np.bincount(semantic_mask.flatten(), minlength=num_classes)
-            fig, ax = plt.subplots(figsize=(5, 1 + 0.5*num_classes))
+            counts = np.bincount(semantic_mask.cpu().numpy().flatten(), minlength=num_classes)
+            # Increase legend height to fit up to 32 labels
+            # Increase legend height to fit up to 32 labels, with more vertical space per label
+            max_labels = max(num_classes, 32)
+            # Use default figure size for natural legend alignment
+            fig, ax = plt.subplots()
             patches = []
             for i in range(num_classes):
                 color = tuple([v/255.0 for v in palette[3*i:3*i+3]])
                 label = f"{label_names[i]} (Label {i}, count={counts[i]})"
                 patch = mpatches.Patch(color=color, label=label)
                 patches.append(patch)
-            ax.legend(handles=patches, loc='center left', frameon=True)
+            # Use vertical legend layout, one label per row
+            ax.legend(handles=patches, frameon=True)
             ax.axis('off')
-            plt.tight_layout()
             # Save legend to buffer
             buf = io.BytesIO()
             fig.savefig(buf, format='png', bbox_inches='tight', dpi=150)
@@ -196,8 +222,23 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
             print(f"[DEBUG] Saved combined mask+legend PNG: {combined_path}")
 
             # Fallback: save raw logits as .npy for debugging
-            np.save(os.path.join(render_path, '{0:05d}_logits.npy'.format(idx)), rendering.detach().cpu().numpy())
-            print(f"[DEBUG] Saved raw logits: {os.path.join(render_path, '{0:05d}_logits.npy'.format(idx))}")
+            logits_npy_path = os.path.join(render_path, '{0:05d}_logits.npy'.format(idx))
+            np.save(logits_npy_path, rendering.detach().cpu().numpy())
+            print(f"[DEBUG] Saved raw logits: {logits_npy_path}")
+
+            # --- Call logit_confidence_map.py to generate uncertainty map PNG ---
+            import subprocess
+            confidence_map_script = os.path.join(os.path.dirname(__file__), 'logit_confidence_map.py')
+            confidence_map_png = logits_npy_path.replace('_logits.npy', '_confidence.png')
+            try:
+                subprocess.run([
+                    'python', confidence_map_script,
+                    '--logits', logits_npy_path,
+                    '--out', confidence_map_png
+                ], check=True)
+                print(f"[DEBUG] Saved uncertainty/confidence map: {confidence_map_png}")
+            except Exception as e:
+                print(f"[WARNING] Could not generate confidence map for {logits_npy_path}: {e}")
         gt = view.original_image[0:3, :, :]
         torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}.png'.format(idx)))
 
@@ -206,7 +247,7 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
         gaussians = GaussianModel(dataset.sh_degree)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
 
-    NUM_CHANNELS = 16  # Keep this in sync with config.h and logits
+    NUM_CHANNELS = 32  # Keep this in sync with config.h and logits
     bg_color = [1.0] * NUM_CHANNELS if dataset.white_background else [0.0] * NUM_CHANNELS
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
