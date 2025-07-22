@@ -1,3 +1,6 @@
+# Project Poster
+![image]([https://github.com/Runsong123/Unified-Lift/blob/main/material/3D_Segmentation.png](https://github.com/gabormarko/3D-semantic-segmentation/blob/main/poster.png))
+
 # Unified-Lift (CVPR 2025)
 ## [[Paper](https://github.com/Runsong123/Unified-Lift/blob/main/material/Unified_Lift.pdf)]
 
