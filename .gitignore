@@ -65,3 +65,5 @@ lang-seg/PyTorch-Encoding/
 submodules/diff-gaussian-rasterization/
 gaussian-splatting/
 MinkowskiEngine_old/
+
+submodules/diff-gaussian-rasterization/
