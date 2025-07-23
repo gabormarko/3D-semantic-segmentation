@@ -4,7 +4,7 @@
 
 MESH_FILE="/home/neural_fields/Unified-Lift-Gabor/data/scannetpp/officescene/scans/mesh_aligned_0.05.ply"
 OUTPUT_DIR="output/minkowski_mesh_grid"
-CELL_SIZE=0.05
+CELL_SIZE=0.015
 DENSITY_EPS=0.05
 DENSITY_MIN_NEIGHBORS=10
 
