@@ -19,20 +19,27 @@ Used conda environments:
 - `cuda` – setup based on [3D Semantic Segmentation CUDA Requirements](https://github.com/gabormarko/3D-semantic-segmentation/blob/main/cuda_requirement.txt)  
 
 ## Pipeline
-1. Geometric scene reconstruction - based on [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting)
+**1. Geometric scene reconstruction** - based on [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting)
 - conda environment: `gs-env`
-- 
+- running the optimizer:
+'''python train.py -s <path to COLMAP or NeRF Synthetic dataset>'''
+- evaluation:
+'''
+python train.py -s <path to COLMAP or NeRF Synthetic dataset> --eval # Train with train/test split
+python render.py -m <path to trained model> # Generate renderings
+python metrics.py -m <path to trained model> # Compute error metrics on renderings
+'''
 
-2. Sparse voxel grid initialization - using the [Minkowski Engine](https://github.com/NVIDIA/MinkowskiEngine/)
+**2. Sparse voxel grid initialization** - using the [Minkowski Engine](https://github.com/NVIDIA/MinkowskiEngine/)
 - conda environment: `minkowsli_cuda110`-
 - 
-3. 2D semantic feature extraction - using [Language-driven Semantic Segmentation (LSeg)](https://github.com/isl-org/lang-seg)
+**3. 2D semantic feature extraction** - using [Language-driven Semantic Segmentation (LSeg)](https://github.com/isl-org/lang-seg)
 - conda environment: `lang-seg`
 - 
-4. Semantic feature map projection
+**. Semantic feature map projection**
 - conda environment: `lang-seg`
 - 
-5. Semantic rasterization - using [GSplat rasterization function](https://docs.gsplat.studio/main/apis/rasterization.html)
+**5. Semantic rasterization** - using [GSplat rasterization function](https://docs.gsplat.studio/main/apis/rasterization.html)
 - conda environment: `gs-env`
 - 
 
