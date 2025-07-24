@@ -22,13 +22,15 @@ Used conda environments:
 **1. Geometric scene reconstruction** - based on [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting)
 - conda environment: `gs-env`
 - running the optimizer:
-'''python train.py -s <path to COLMAP or NeRF Synthetic dataset>'''
+```
+python train.py -s <path to COLMAP or NeRF Synthetic dataset>
+```
 - evaluation:
-'''
+```
 python train.py -s <path to COLMAP or NeRF Synthetic dataset> --eval # Train with train/test split
 python render.py -m <path to trained model> # Generate renderings
 python metrics.py -m <path to trained model> # Compute error metrics on renderings
-'''
+```
 
 **2. Sparse voxel grid initialization** - using the [Minkowski Engine](https://github.com/NVIDIA/MinkowskiEngine/)
 - conda environment: `minkowsli_cuda110`-
