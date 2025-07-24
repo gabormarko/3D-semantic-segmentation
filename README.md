@@ -7,7 +7,7 @@ By combining the advantages of these baseline methods and representation forms, 
 We test the performance of our method on the real-world ScanNet++ dataset to examine its robustness and evaluate the functionality of our proposed pipeline.
 
 ## Project Poster
-![image](poster/poster.png)
+![image](poster/Poster_FINAL.png)
 
 # Project Description
 ## Setup
