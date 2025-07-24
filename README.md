@@ -18,12 +18,15 @@ Used conda environments:
 - `cuda` – setup based on [3D Semantic Segmentation CUDA Requirements](https://github.com/gabormarko/3D-semantic-segmentation/blob/main/cuda_requirement.txt)  
 - `gs-env` – setup based on [Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting)
 
-## Method
-1. Geometric scene reconstruction
-2. Sparse voxel grid initialization
-3. 2D semantic feature extraction
-4. Semantic feature map projection
-5. Semantic rasterization
+## Pipeline
+###1. Geometric scene reconstruction - based on 3D Gaussian Splatting ([3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting))
+- conda environment: `gs-env`
+- 
+
+###2. Sparse voxel grid initialization
+###3. 2D semantic feature extraction
+###4. Semantic feature map projection
+###5. Semantic rasterization
 
 
 ## References
