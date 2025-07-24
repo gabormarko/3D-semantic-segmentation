@@ -1,5 +1,5 @@
 # Project Poster
-![image](https://github.com/gabormarko/3D-semantic-segmentation/poster/poster.png)
+![image](poster/poster.png)
 
 # Project Description
 
