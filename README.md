@@ -12,25 +12,33 @@ We test the performance of our method on the real-world ScanNet++ dataset to exa
 # Project Description
 ## Setup
 Used conda environments:
-- `unified_lift_cuda121` – setup based on [Unified-Lift Usage.md](https://github.com/Runsong123/Unified-Lift/blob/main/doc/Usage.md)  
-- `minkowski_cuda110` – setup based on [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine/) – not well supported for CUDA 12.X  
+<!-- - `unified_lift_cuda121` – setup based on [Unified-Lift Usage.md](https://github.com/Runsong123/Unified-Lift/blob/main/doc/Usage.md)  -->
+- `gs-env` – setup based on [3D Gaussian Splatting Installation](https://github.com/graphdeco-inria/gaussian-splatting?tab=readme-ov-file#setup)
+- `minkowski_cuda110` – setup based on [MinkowskiEngine Installation](https://github.com/NVIDIA/MinkowskiEngine/) – not well supported for CUDA 12.X  
 - `lang-seg` – setup based on [Lang-Seg Installation](https://github.com/isl-org/lang-seg?tab=readme-ov-file#installation)  
 - `cuda` – setup based on [3D Semantic Segmentation CUDA Requirements](https://github.com/gabormarko/3D-semantic-segmentation/blob/main/cuda_requirement.txt)  
-- `gs-env` – setup based on [Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting)
 
 ## Pipeline
-###1. Geometric scene reconstruction - based on 3D Gaussian Splatting ([3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting))
+1. Geometric scene reconstruction - based on [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting)
 - conda environment: `gs-env`
 - 
 
-###2. Sparse voxel grid initialization
-###3. 2D semantic feature extraction
-###4. Semantic feature map projection
-###5. Semantic rasterization
+2. Sparse voxel grid initialization - using the [Minkowski Engine](https://github.com/NVIDIA/MinkowskiEngine/)
+- conda environment: `minkowsli_cuda110`-
+- 
+3. 2D semantic feature extraction - using [Language-driven Semantic Segmentation (LSeg)](https://github.com/isl-org/lang-seg)
+- conda environment: `lang-seg`
+- 
+4. Semantic feature map projection
+- conda environment: `lang-seg`
+- 
+5. Semantic rasterization - using [GSplat rasterization function](https://docs.gsplat.studio/main/apis/rasterization.html)
+- conda environment: `gs-env`
+- 
 
 
 ## References
-This code is based on [Gaussian Grouping](https://github.com/lkeab/gaussian-grouping), [OmniSeg3D-GS](https://github.com/OceanYing/OmniSeg3D-GS), [Panoptic-Lifting](https://github.com/nihalsid/panoptic-lifting). We thank the authors for releasing their code. 
+This code is based on [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting), [OmniSeg3D-GS](https://github.com/OceanYing/OmniSeg3D-GS), [Panoptic-Lifting](https://github.com/nihalsid/panoptic-lifting). We thank the authors for releasing their code. 
 
 
 
