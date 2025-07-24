@@ -25,13 +25,21 @@ def mkdir_p(folder_path):
             raise
 
 def searchForMaxIteration(folder):
-    # Robustly extract iteration numbers from checkpoint filenames
+    # Robustly extract iteration numbers from checkpoint filenames, recursively
+    import re
     saved_iters = []
-    for fname in os.listdir(folder):
-        # Match any sequence of digits before .pth at the end
-        m = re.search(r'(\d+)(?=\.pth$)', fname)
-        if m:
-            saved_iters.append(int(m.group(1)))
+    for root, dirs, files in os.walk(folder):
+        for fname in files:
+            # Match any sequence of digits before .ply or .pth at the end
+            m = re.search(r'(\d+)(?=\.(ply|pth)$)', fname)
+            if m:
+                saved_iters.append(int(m.group(1)))
+            # If file is named point_cloud.ply, extract digits from parent folder
+            elif fname == 'point_cloud.ply':
+                parent = os.path.basename(root)
+                m2 = re.search(r'(\d+)', parent)
+                if m2:
+                    saved_iters.append(int(m2.group(1)))
     if not saved_iters:
         raise FileNotFoundError(f"No checkpoint files with iteration number found in {folder}")
     return max(saved_iters)

@@ -48,14 +48,10 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         debug=pipe.debug
     )
 
-    rasterizer = GaussianRasterizer(raster_settings=raster_settings)
-
     means3D = pc.get_xyz
     means2D = screenspace_points
     opacity = pc.get_opacity
 
-    # If precomputed 3d covariance is provided, use it. If not, then it will be computed from
-    # scaling / rotation by the rasterizer.
     scales = None
     rotations = None
     cov3D_precomp = None
@@ -65,8 +61,6 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         scales = pc.get_scaling
         rotations = pc.get_rotation
 
-    # If precomputed colors are provided, use them. Otherwise, if it is desired to precompute colors
-    # from SHs in Python, do it. If not, then SH -> RGB conversion will be done by rasterizer.
     shs = None
     colors_precomp = None
     if override_color is None:
@@ -82,22 +76,45 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     else:
         colors_precomp = override_color
 
-    # Rasterize visible Gaussians to image, obtain their radii (on screen). 
+    semantic_logits = getattr(pc, 'logits', None)
+    # Import at top to avoid runtime errors
+    from diff_gaussian_rasterization.diff_gaussian_rasterization import SemanticGaussianRasterizer, GaussianRasterizer
+    if semantic_logits is not None:
+        semantic_rasterizer = SemanticGaussianRasterizer(raster_settings=raster_settings)
+        try:
+            rendered_image, radii, rendered_objects, rendered_semantics = semantic_rasterizer(
+                means3D=means3D,
+                means2D=means2D,
+                opacities=opacity,
+                semantic_logits=semantic_logits,
+                shs=shs,
+                sh_objs=sh_objs,
+                colors_precomp=colors_precomp,
+                scales=scales,
+                rotations=rotations,
+                cov3D_precomp=cov3D_precomp
+            )
+            return {"render": rendered_image,
+                    "semantic_logits": rendered_semantics,
+                    "viewspace_points": screenspace_points,
+                    "visibility_filter": radii > 0,
+                    "radii": radii,
+                    "render_object": rendered_objects}
+        except NotImplementedError:
+            print("[WARN] Semantic rasterization kernel not implemented yet. Falling back to RGB only.")
+    rasterizer = GaussianRasterizer(raster_settings=raster_settings)
     rendered_image, radii, rendered_objects = rasterizer(
-        means3D = means3D,
-        means2D = means2D,
-        shs = shs,
-        sh_objs = sh_objs,
-        colors_precomp = colors_precomp,
-        opacities = opacity,
-        scales = scales,
-        rotations = rotations,
-        cov3D_precomp = cov3D_precomp)
-
-    # Those Gaussians that were frustum culled or had a radius of 0 were not visible.
-    # They will be excluded from value updates used in the splitting criteria.
+        means3D=means3D,
+        means2D=means2D,
+        shs=shs,
+        sh_objs=sh_objs,
+        colors_precomp=colors_precomp,
+        opacities=opacity,
+        scales=scales,
+        rotations=rotations,
+        cov3D_precomp=cov3D_precomp)
     return {"render": rendered_image,
             "viewspace_points": screenspace_points,
-            "visibility_filter" : radii > 0,
+            "visibility_filter": radii > 0,
             "radii": radii,
             "render_object": rendered_objects}
