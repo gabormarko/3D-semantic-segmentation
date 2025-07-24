@@ -12,11 +12,11 @@ We test the performance of our method on the real-world ScanNet++ dataset to exa
 # Project Description
 ## Setup
 Used conda environments:
-unified_lift_cuda121 - setup based on [https://github.com/Runsong123/Unified-Lift/blob/main/doc/Usage.md](https://github.com/Runsong123/Unified-Lift/blob/main/doc/Usage.md)
-minkowski_cuda110 - setup based on [https://github.com/NVIDIA/MinkowskiEngine/](https://github.com/NVIDIA/MinkowskiEngine#pip) - not well supported for CUDA 12.X
-lang-seg - setup based on [https://github.com/isl-org/lang-seg?tab=readme-ov-file#installation](https://github.com/isl-org/lang-seg?tab=readme-ov-file#installation)
-cuda - setup based on [https://github.com/gabormarko/3D-semantic-segmentation/blob/main/cuda_requirement.txt](https://github.com/gabormarko/3D-semantic-segmentation/blob/main/cuda_requirement.txt)
-gs-env - setup based on [https://github.com/graphdeco-inria/gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting?tab=readme-ov-file#setup)
+- `unified_lift_cuda121` – setup based on [Unified-Lift Usage.md](https://github.com/Runsong123/Unified-Lift/blob/main/doc/Usage.md)  
+- `minkowski_cuda110` – setup based on [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine/) – not well supported for CUDA 12.X  
+- `lang-seg` – setup based on [Lang-Seg Installation](https://github.com/isl-org/lang-seg?tab=readme-ov-file#installation)  
+- `cuda` – setup based on [3D Semantic Segmentation CUDA Requirements](https://github.com/gabormarko/3D-semantic-segmentation/blob/main/cuda_requirement.txt)  
+- `gs-env` – setup based on [Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting)
 
 ## Method
 1. Geometric scene reconstruction
