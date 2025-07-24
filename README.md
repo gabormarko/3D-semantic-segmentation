@@ -90,6 +90,9 @@ bash voxel_to_gaussian/render_semantics_logits.sh
 - based on per-pixel ground truth labels, rendered from the available annotated 3D mesh for the ScanNet++ dataset
 - mIoU and fwIoU metrics 
 
+## Open-Vocabulary Semantic Novel View Synthesis - Qualitative results
+![image](poster/compare5.png)
+
 ## References
 This code is based on [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting), [LSeg](https://github.com/isl-org/lang-seg), [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine/), and [Unified-Lift](https://github.com/Runsong123/Unified-Lift/) codebases. We thank the authors for releasing their code. 
 
