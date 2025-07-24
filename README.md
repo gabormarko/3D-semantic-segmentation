@@ -6,7 +6,7 @@ By combining the advantages of these baseline methods and representation forms, 
 
 We test the performance of our method on the real-world ScanNet++ dataset to examine its robustness and evaluate the functionality of our proposed pipeline.
 
-The 4-page report of the project is available at: [Report (PDF)](poster/Semantic_Novel_View_Synthesis_with_3D_Gaussians___Final_report_ADL4CV.pdf)
+The detailed 4-page report of the project is available at: [Report (PDF)](poster/Semantic_Novel_View_Synthesis_with_3D_Gaussians___Final_report_ADL4CV.pdf)
 
 ## Project Poster
 ![image](poster/Poster_FINAL.png)
@@ -22,7 +22,7 @@ Used conda environments:
 
 ## Pipeline
 **1. Geometric scene reconstruction** - based on [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting)
-- conda environment: `gs-env`
+- conda environment: `gs-env`, folder: `gaussian_splatting`
 - **input:** COLMAP or NeRF Synthetic dataset, containing multi-view RGB images, and camera intrincics, extrinsics parameters
 - **output:** dense Gaussian scene reconstruction, checkpoint files including all the properties of the Gaussians are saved out as '.ply' files
 - **parameters:** iteration number, optimization parameters, densifying parameters, thresholds
@@ -38,7 +38,7 @@ python gaussian_splatting/metrics.py -m <path to trained model>   # Compute erro
 ```
 
 **2. Sparse voxel grid initialization** - using the [Minkowski Engine](https://github.com/NVIDIA/MinkowskiEngine/)
-- conda environment: `minkowsli_cuda110`, folder: `gaussian_splatting`
+- conda environment: `minkowsli_cuda110`, folder: `script`, `MinkowskiEngine`
 - **input:** '.ply' file containing the Gaussians
 - **output:** sparse voxel grid initialized using the filtered Gaussian centers around the geometry
 - **parameters:** cell size, local density filtering parameters, opacity&scale threshold, normal consistency parameters
