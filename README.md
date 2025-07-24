@@ -26,17 +26,17 @@ Used conda environments:
 - **parameters:** iteration number, optimization parameters, densifying parameters, thresholds
 - running the optimizer, creating the Gaussians:
 ```
-python train.py -s <path to COLMAP or NeRF Synthetic dataset>
+python gaussian_splatting/train.py -s <path to COLMAP or NeRF Synthetic dataset>
 ```
 - evaluation:
 ```
-python train.py -s <path to COLMAP or NeRF Synthetic dataset> --eval   # Train with train/test split
-python render.py -m <path to trained model>   # Generate renderings
-python metrics.py -m <path to trained model>   # Compute error metrics on renderings
+python gaussian_splatting/train.py -s <path to COLMAP or NeRF Synthetic dataset> --eval   # Train with train/test split
+python gaussian_splatting/render.py -m <path to trained model>   # Generate renderings
+python gaussian_splatting/metrics.py -m <path to trained model>   # Compute error metrics on renderings
 ```
 
 **2. Sparse voxel grid initialization** - using the [Minkowski Engine](https://github.com/NVIDIA/MinkowskiEngine/)
-- conda environment: `minkowsli_cuda110`-
+- conda environment: `minkowsli_cuda110`, folder: `gaussian_splatting`
 - **input:** '.ply' file containing the Gaussians
 - **output:** sparse voxel grid initialized using the filtered Gaussian centers around the geometry
 - **parameters:** cell size, local density filtering parameters, opacity&scale threshold, normal consistency parameters
@@ -46,15 +46,45 @@ bash script/minkowski_voxel_grid_from_ply_advanced.sh   # set input-output folde
 ```
 
 **3. 2D semantic feature extraction** - using [Language-driven Semantic Segmentation (LSeg)](https://github.com/isl-org/lang-seg)
-- conda environment: `lang-seg`
-- 
-**. Semantic feature map projection**
-- conda environment: `lang-seg`
-- 
-**5. Semantic rasterization** - using [GSplat rasterization function](https://docs.gsplat.studio/main/apis/rasterization.html)
-- conda environment: `gs-env`
-- 
+- conda environment: `lang-seg`, folder:  `lang-seg`
+- **input:** COLMAP or NeRF Synthetic dataset, containing multi-view RGB images, and camera intrincics, extrinsics parameters
+- **output:** 512D raw per-pixel feature embeddings for every input image
+- **parameters:** backbone model, resized resolution, checkpoint weights, extract/segmenatation mode
+- running the LSeg embedded feature extraction:
+```
+# lang-seg/batch_lseg_infer.py: set checkpoint weights, backbone model, extract/segmenatation mode
+bash lang-seg/run_batch_lseg_infer.sh   # set input-output folder
+```
 
+**4. Semantic feature map projection**
+- conda environment: `cuda`, folder: `cuda_project_image_to_sparse_voxel`
+- **input:** 512D raw per-pixel feature embeddings for every input image
+- **output:** aggregated 512D raw per-voxel feature embeddings from all views
+- **parameters:** camera parameters, voxel grid file, downsampling parameter
+- running the feature map projection and aggregation:
+```
+python cuda_project_image_to_sparse_voxel/aggregate_voxel_features_onthefly.py   # set arguments within the .py file
+```
+
+**5.1. Associating feature embeddings with Gaussians, open-vocabulary query**
+- conda environment: `gs-env`, folder: `voxel_to_Gaussian`
+- **input:**  aggregated 512D raw per-voxel feature embeddings from all views, Gaussian representation from 1st step, LSeg text encoder model and checkpoint from 3rd step
+- **output:** per-Gaussian logits: result of open-vocabulary query on the voxel space feature embeddings, associated to the Gaussians
+- **parameters:** open-vocabulary query promts, 
+- running the per-Gaussian logits creation:
+```
+bash voxel_to_gaussian/voxeltoGaussian_logits.sh
+```
+
+**5.2 .Semantic rasterization** - using [GSplat rasterization function](https://docs.gsplat.studio/main/apis/rasterization.html)
+- conda environment: `gs-env`, folder: `voxel_to_Gaussian`
+- **input:** per-Gaussian logits, Gaussian representation from 1st step
+- **output:** rasterized logits over the Gaussians, semantic segmentation map of novel view images using argmax of the alpha-blended logits, per-pixel confidence map
+- **parameters:** camera parameters, voxel grid file, downsampling parameter
+- running the semantic rasterization script:
+```
+bash voxel_to_gaussian/render_semantics_logits.sh
+```
 
 ## References
 This code is based on [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting), [OmniSeg3D-GS](https://github.com/OceanYing/OmniSeg3D-GS), [Panoptic-Lifting](https://github.com/nihalsid/panoptic-lifting). We thank the authors for releasing their code. 
