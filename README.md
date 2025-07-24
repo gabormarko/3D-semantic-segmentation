@@ -21,20 +21,30 @@ Used conda environments:
 ## Pipeline
 **1. Geometric scene reconstruction** - based on [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting)
 - conda environment: `gs-env`
-- running the optimizer:
+- **input:** COLMAP or NeRF Synthetic dataset, containing multi-view RGB images, and camera intrincics, extrinsics parameters
+- **output:** dense Gaussian scene reconstruction, checkpoint files including all the properties of the Gaussians are saved out as '.ply' files
+- **parameters:** iteration number, optimization parameters, densifying parameters, thresholds
+- running the optimizer, creating the Gaussians:
 ```
 python train.py -s <path to COLMAP or NeRF Synthetic dataset>
 ```
 - evaluation:
 ```
-python train.py -s <path to COLMAP or NeRF Synthetic dataset> --eval # Train with train/test split
-python render.py -m <path to trained model> # Generate renderings
-python metrics.py -m <path to trained model> # Compute error metrics on renderings
+python train.py -s <path to COLMAP or NeRF Synthetic dataset> --eval   # Train with train/test split
+python render.py -m <path to trained model>   # Generate renderings
+python metrics.py -m <path to trained model>   # Compute error metrics on renderings
 ```
 
 **2. Sparse voxel grid initialization** - using the [Minkowski Engine](https://github.com/NVIDIA/MinkowskiEngine/)
 - conda environment: `minkowsli_cuda110`-
-- 
+- **input:** '.ply' file containing the Gaussians
+- **output:** sparse voxel grid initialized using the filtered Gaussian centers around the geometry
+- **parameters:** cell size, local density filtering parameters, opacity&scale threshold, normal consistency parameters
+- running the sparse voxel grid creator
+```
+bash script/minkowski_voxel_grid_from_ply_advanced.sh   # set input-output folder and filtering parameters
+```
+
 **3. 2D semantic feature extraction** - using [Language-driven Semantic Segmentation (LSeg)](https://github.com/isl-org/lang-seg)
 - conda environment: `lang-seg`
 - 
