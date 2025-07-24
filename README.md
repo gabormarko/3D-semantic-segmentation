@@ -76,7 +76,7 @@ python cuda_project_image_to_sparse_voxel/aggregate_voxel_features_onthefly.py  
 bash voxel_to_gaussian/voxeltoGaussian_logits.sh
 ```
 
-**5.2 .Semantic rasterization** - using [GSplat rasterization function](https://docs.gsplat.studio/main/apis/rasterization.html)
+**5.2. Semantic rasterization** - using [GSplat rasterization function](https://docs.gsplat.studio/main/apis/rasterization.html)
 - conda environment: `gs-env`, folder: `voxel_to_Gaussian`
 - **input:** per-Gaussian logits, Gaussian representation from 1st step
 - **output:** rasterized logits over the Gaussians, semantic segmentation map of novel view images using argmax of the alpha-blended logits, per-pixel confidence map
@@ -86,8 +86,12 @@ bash voxel_to_gaussian/voxeltoGaussian_logits.sh
 bash voxel_to_gaussian/render_semantics_logits.sh
 ```
 
+## Evaluation
+- based on per-pixel ground truth labels, rendered from the available annotated 3D mesh for the ScanNet++ dataset
+- mIoU and fwIoU metrics 
+
 ## References
-This code is based on [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting), [OmniSeg3D-GS](https://github.com/OceanYing/OmniSeg3D-GS), [Panoptic-Lifting](https://github.com/nihalsid/panoptic-lifting). We thank the authors for releasing their code. 
+This code is based on [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting), [LSeg](https://github.com/isl-org/lang-seg), [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine/), and [Unified-Lift](https://github.com/Runsong123/Unified-Lift/) codebases. We thank the authors for releasing their code. 
 
 
 
