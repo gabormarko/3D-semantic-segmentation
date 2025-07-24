@@ -6,6 +6,8 @@ By combining the advantages of these baseline methods and representation forms, 
 
 We test the performance of our method on the real-world ScanNet++ dataset to examine its robustness and evaluate the functionality of our proposed pipeline.
 
+The 4-page report of the project is available at: [Report (PDF)](poster/Semantic_Novel_View_Synthesis_with_3D_Gaussians___Final_report_ADL4CV.pdf)
+
 ## Project Poster
 ![image](poster/Poster_FINAL.png)
 
