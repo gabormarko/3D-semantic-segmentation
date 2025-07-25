@@ -40,13 +40,13 @@ python metrics.py -m <path to trained model>   # Compute error metrics on render
 ```
 
 **2. Sparse voxel grid initialization** - using the [Minkowski Engine](https://github.com/NVIDIA/MinkowskiEngine/)
-- conda environment: `minkowsli_cuda110`, folder: `script`, `MinkowskiEngine`
+- conda environment: `minkowski_cuda110`, folder: `script`, `MinkowskiEngine`
 - **input:** '.ply' file containing the Gaussians
 - **output:** sparse voxel grid initialized using the filtered Gaussian centers around the geometry
 - **parameters:** cell size, local density filtering parameters, opacity&scale threshold, normal consistency parameters
 - running the sparse voxel grid creator
 ```
-conda activate minkowsli_cuda110
+conda activate minkowski_cuda110
 bash script/minkowski_voxel_grid_from_ply_advanced.sh   # set input-output folder and filtering parameters
 ```
 
