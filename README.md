@@ -20,19 +20,20 @@ Used conda environments:
 
 ## Pipeline
 **1. Geometric scene reconstruction** - based on [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting)
-- conda environment: `gs-env`
+- conda environment: `gs-env`, folder: `gaussian_splatting`
 - **input:** COLMAP or NeRF Synthetic dataset, containing multi-view RGB images, and camera intrincics, extrinsics parameters
 - **output:** dense Gaussian scene reconstruction, checkpoint files including all the properties of the Gaussians are saved out as '.ply' files
 - **parameters:** iteration number, optimization parameters, densifying parameters, thresholds
 - running the optimizer, creating the Gaussians:
 ```
-python gaussian_splatting/train.py -s <path to COLMAP or NeRF Synthetic dataset>
+cd gaussian_splatting/
+python train.py -s <path to COLMAP or NeRF Synthetic dataset>
 ```
 - evaluation:
 ```
-python gaussian_splatting/train.py -s <path to COLMAP or NeRF Synthetic dataset> --eval   # Train with train/test split
-python gaussian_splatting/render.py -m <path to trained model>   # Generate renderings
-python gaussian_splatting/metrics.py -m <path to trained model>   # Compute error metrics on renderings
+python train.py -s <path to COLMAP or NeRF Synthetic dataset> --eval   # Train with train/test split
+python render.py -m <path to trained model>   # Generate renderings
+python metrics.py -m <path to trained model>   # Compute error metrics on renderings
 ```
 
 **2. Sparse voxel grid initialization** - using the [Minkowski Engine](https://github.com/NVIDIA/MinkowskiEngine/)
@@ -52,8 +53,9 @@ bash script/minkowski_voxel_grid_from_ply_advanced.sh   # set input-output folde
 - **parameters:** backbone model, resized resolution, checkpoint weights, extract/segmenatation mode
 - running the LSeg embedded feature extraction:
 ```
-# lang-seg/batch_lseg_infer.py: set checkpoint weights, backbone model, extract/segmenatation mode
-bash lang-seg/run_batch_lseg_infer.sh   # set input-output folder
+cd lang-seg/
+# batch_lseg_infer.py: set checkpoint weights, backbone model, extract/segmenatation mode
+bash run_batch_lseg_infer.sh   # set input-output folder
 ```
 
 **4. Semantic feature map projection**
@@ -63,7 +65,8 @@ bash lang-seg/run_batch_lseg_infer.sh   # set input-output folder
 - **parameters:** camera parameters, voxel grid file, downsampling parameter
 - running the feature map projection and aggregation:
 ```
-python cuda_project_image_to_sparse_voxel/aggregate_voxel_features_onthefly.py   # set arguments within the .py file
+cd cuda_project_image_to_sparse_voxel/
+python aggregate_voxel_features_onthefly.py   # set arguments within the .py file
 ```
 
 **5.1. Associating feature embeddings with Gaussians, open-vocabulary query**
@@ -73,7 +76,8 @@ python cuda_project_image_to_sparse_voxel/aggregate_voxel_features_onthefly.py  
 - **parameters:** open-vocabulary query promts, 
 - running the per-Gaussian logits creation:
 ```
-bash voxel_to_gaussian/voxeltoGaussian_logits.sh
+cd voxel_to_Gaussian/
+bash voxeltoGaussian_logits.sh
 ```
 
 **5.2. Semantic rasterization** - using [GSplat rasterization function](https://docs.gsplat.studio/main/apis/rasterization.html)
@@ -83,12 +87,12 @@ bash voxel_to_gaussian/voxeltoGaussian_logits.sh
 - **parameters:** camera parameters, voxel grid file, downsampling parameter
 - running the semantic rasterization script:
 ```
-bash voxel_to_gaussian/render_semantics_logits.sh
+bash render_semantics_logits.sh
 ```
 
 ## Evaluation
 - based on per-pixel ground truth labels, rendered from the available annotated 3D mesh for the ScanNet++ dataset
-- mIoU and fwIoU metrics 
+- mIoU and fwIoU metrics
 
 ## References
 This code is based on [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting), [LSeg](https://github.com/isl-org/lang-seg), [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine/), and [Unified-Lift](https://github.com/Runsong123/Unified-Lift/) codebases. We thank the authors for releasing their code. 

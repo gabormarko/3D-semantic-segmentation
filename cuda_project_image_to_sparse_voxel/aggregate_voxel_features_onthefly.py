@@ -15,7 +15,7 @@ parser.add_argument('--first_only', action='store_true', help='Only process the 
 args = parser.parse_args()
 
 # Create output directory for checkpoints and final outputs
-CHECKPOINT_DIR = "voxel_feature_checkpoints_vox195120_NEW"
+CHECKPOINT_DIR = "voxel_feature_checkpoints_vox87319_NEW"
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
 # Paths and config
@@ -24,7 +24,8 @@ LSEG_DIR = "/home/neural_fields/Unified-Lift-Gabor/data/scannetpp/officescene/ls
 CAM_PARAMS_ORIG = "camera_params/camera_params.json"
 CAM_PARAMS_DS = "camera_params/camera_params_downsampled.json"
 OCCUPANCY = "ALL_occupancy.pt"
-VOXEL_PLY = "/home/neural_fields/Unified-Lift-Gabor/output/minkowski_mesh_grid/mesh_minkowski_grid_vox195120.ply"
+#VOXEL_PLY = "/home/neural_fields/Unified-Lift-Gabor/output/minkowski_mesh_grid/mesh_minkowski_grid_vox195120.ply"
+VOXEL_PLY = "/home/neural_fields/Unified-Lift-Gabor/output/minkowski_grid/officescene_filtered_ply_adv/39ac5c9a-1_minkowski_87319vox_iter_opac0.5_cell0.04_eps0.08_neig4_grid.ply"
 TENSOR_DATA_TMP = "tensor_data/tmp_tensor_data.pt"
 
 
