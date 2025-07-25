@@ -35,7 +35,7 @@ except:
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background, train_test_exp, separate_sh, logit_path, first_only=False):
     # Output folders (match color rendering)
-    base_path = '/home/neural_fields/Unified-Lift-Gabor/voxel_to_gaussian/semantics_195120_30000_train_NEW'
+    base_path = '/home/neural_fields/Unified-Lift-Gabor/voxel_to_gaussian/semantics_87319_30000_NEW'
     render_path = os.path.join(base_path, name, 'renders')
     gts_path = os.path.join(base_path, name, 'gt')
     labels_path = os.path.join(base_path, name, 'labels')

@@ -26,6 +26,7 @@ Used conda environments:
 - **parameters:** iteration number, optimization parameters, densifying parameters, thresholds
 - running the optimizer, creating the Gaussians:
 ```
+conda activate gs-env
 cd gaussian_splatting/
 python train.py -s <path to COLMAP or NeRF Synthetic dataset>
 ```
@@ -43,6 +44,7 @@ python metrics.py -m <path to trained model>   # Compute error metrics on render
 - **parameters:** cell size, local density filtering parameters, opacity&scale threshold, normal consistency parameters
 - running the sparse voxel grid creator
 ```
+conda activate minkowsli_cuda110
 bash script/minkowski_voxel_grid_from_ply_advanced.sh   # set input-output folder and filtering parameters
 ```
 
@@ -53,6 +55,7 @@ bash script/minkowski_voxel_grid_from_ply_advanced.sh   # set input-output folde
 - **parameters:** backbone model, resized resolution, checkpoint weights, extract/segmenatation mode
 - running the LSeg embedded feature extraction:
 ```
+conda activate lang-seg
 cd lang-seg/
 # batch_lseg_infer.py: set checkpoint weights, backbone model, extract/segmenatation mode
 bash run_batch_lseg_infer.sh   # set input-output folder
@@ -65,17 +68,19 @@ bash run_batch_lseg_infer.sh   # set input-output folder
 - **parameters:** camera parameters, voxel grid file, downsampling parameter
 - running the feature map projection and aggregation:
 ```
+conda activate cuda
 cd cuda_project_image_to_sparse_voxel/
 python aggregate_voxel_features_onthefly.py   # set arguments within the .py file
 ```
 
 **5.1. Associating feature embeddings with Gaussians, open-vocabulary query**
-- conda environment: `gs-env`, folder: `voxel_to_Gaussian`
+- conda environment: `lang-seg`, folder: `voxel_to_Gaussian`
 - **input:**  aggregated 512D raw per-voxel feature embeddings from all views, Gaussian representation from 1st step, LSeg text encoder model and checkpoint from 3rd step
 - **output:** per-Gaussian logits: result of open-vocabulary query on the voxel space feature embeddings, associated to the Gaussians
 - **parameters:** open-vocabulary query promts, 
 - running the per-Gaussian logits creation:
 ```
+conda activate lang-seg
 cd voxel_to_Gaussian/
 bash voxeltoGaussian_logits.sh
 ```
@@ -87,6 +92,7 @@ bash voxeltoGaussian_logits.sh
 - **parameters:** camera parameters, voxel grid file, downsampling parameter
 - running the semantic rasterization script:
 ```
+conda activate gs-env
 bash render_semantics_logits.sh
 ```
 

@@ -10,7 +10,7 @@ MODEL_PATH="/home/neural_fields/gaussian-splatting/output/39ac5c9a-1"   # Path t
 #MODEL_PATH="/home/neural_fields/Unified-Lift-Gabor/betterGaussians/filtered_gaussians.ply"
 
 ITERATION=-1                           # Checkpoint iteration (-1 for latest)
-GAUSSIAN_LABELS="/home/neural_fields/Unified-Lift-Gabor/voxel_to_gaussian/gaussian_semantics_filt_gauss_195120_30000_NEW.npz"  # Path to semantic logits npz
+GAUSSIAN_LABELS="/home/neural_fields/Unified-Lift-Gabor/voxel_to_gaussian/gaussian_semantics_filt_gauss_87319_30000_NEW.npz"  # Path to semantic logits npz
 SKIP_TRAIN=false                       # Set to true to skip train rendering
 SKIP_TEST=false                        # Set to true to skip test rendering
 QUIET=false                            # Set to true for quiet mode
