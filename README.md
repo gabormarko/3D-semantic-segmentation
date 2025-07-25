@@ -6,6 +6,8 @@ By combining the advantages of these baseline methods and representation forms, 
 
 We test the performance of our method on the real-world ScanNet++ dataset to examine its robustness and evaluate the functionality of our proposed pipeline.
 
+The detailed 4-page report of the project is available at: [Report (PDF)](poster/Semantic_Novel_View_Synthesis_with_3D_Gaussians___Final_report_ADL4CV.pdf)
+
 ## Project Poster
 ![image](poster/Poster_FINAL.png)
 
@@ -38,7 +40,7 @@ python metrics.py -m <path to trained model>   # Compute error metrics on render
 ```
 
 **2. Sparse voxel grid initialization** - using the [Minkowski Engine](https://github.com/NVIDIA/MinkowskiEngine/)
-- conda environment: `minkowsli_cuda110`, folder: `gaussian_splatting`
+- conda environment: `minkowsli_cuda110`, folder: `script`, `MinkowskiEngine`
 - **input:** '.ply' file containing the Gaussians
 - **output:** sparse voxel grid initialized using the filtered Gaussian centers around the geometry
 - **parameters:** cell size, local density filtering parameters, opacity&scale threshold, normal consistency parameters
@@ -99,6 +101,9 @@ bash render_semantics_logits.sh
 ## Evaluation
 - based on per-pixel ground truth labels, rendered from the available annotated 3D mesh for the ScanNet++ dataset
 - mIoU and fwIoU metrics
+
+## Open-Vocabulary Semantic Novel View Synthesis - Qualitative results
+![image](poster/compare5.png)
 
 ## References
 This code is based on [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting), [LSeg](https://github.com/isl-org/lang-seg), [MinkowskiEngine](https://github.com/NVIDIA/MinkowskiEngine/), and [Unified-Lift](https://github.com/Runsong123/Unified-Lift/) codebases. We thank the authors for releasing their code. 
